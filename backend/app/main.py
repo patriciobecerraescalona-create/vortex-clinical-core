@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# DB: Base y engine para inicialización de tablas
+from app.db.base import Base
+from app.db.session import engine
+
+# Modelos (importar para registrar en Base.metadata)
+from app.models import voice_event, memory_node, core  # noqa: F401
+
 # =========================
 # APP INIT
 # =========================
@@ -20,6 +27,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# =========================
+# STARTUP: Crear tablas si no existen
+# =========================
+@app.on_event("startup")
+def on_startup():
+    """Crea las tablas en la BD si no existen (checkfirst=True por defecto)."""
+    Base.metadata.create_all(bind=engine)
 
 # =========================
 # ROUTERS
