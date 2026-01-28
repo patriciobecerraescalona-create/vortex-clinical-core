@@ -1,0 +1,33 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: vortex-db
+    environment:
+      POSTGRES_DB: vortex
+      POSTGRES_USER: vortex_user
+      POSTGRES_PASSWORD: vortex_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vortex_user -d vortex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: vortex-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://vortex_user:vortex_pass@db:5432/vortex
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./logs:/logs
+      - ./data/uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy

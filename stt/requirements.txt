@@ -1,0 +1,6 @@
+faster-whisper
+torch
+sounddevice
+numpy
+fastapi
+uvicorn

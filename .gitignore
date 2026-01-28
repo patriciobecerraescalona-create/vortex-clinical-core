@@ -1,0 +1,16 @@
+# Python virtualenv
+.venv/
+
+# Docker / Postgres volumes
+data/
+data/pg/
+data/postgres/
+pgdata/
+
+# Python cache
+_pycache_/
+*.pyc
+
+# Env vars
+.env
+.env.*
