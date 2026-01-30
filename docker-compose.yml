@@ -1,33 +1,38 @@
+version: "3.9"
+
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: postgres:16
     container_name: vortex-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: vortex
       POSTGRES_USER: vortex_user
       POSTGRES_PASSWORD: vortex_pass
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
-      - ./data/pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vortex_user -d vortex"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - vortex_pgdata:/var/lib/postgresql/data
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: vortex-api
+    depends_on:
+      - db
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://vortex_user:vortex_pass@db:5432/vortex
-      LOG_LEVEL: INFO
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./logs:/logs
-      - ./data/uploads:/data/uploads
-    depends_on:
-      db:
-        condition: service_healthy
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+volumes:
+  vortex_pgdata:

@@ -41,6 +41,7 @@ def handle_voice_event(payload, db: Session) -> dict:
     # -------------------------
     if mode == "LIFE":
         node = MemoryNode(
+            user_id=payload.user_id,
             content=clean_text,
             created_at=datetime.utcnow(),
         )
@@ -69,8 +70,13 @@ def handle_voice_event(payload, db: Session) -> dict:
 
     event = VoiceEvent(
         procedure_id=procedure_uuid,
+        user_id=payload.user_id,
         intent="CLINICAL_NOTE",
+        confidence="LAB",
         raw_text=clean_text,
+        feedback={},
+        source="lab",
+        user_role=payload.role or "anonymous",
     )
     db.add(event)
     db.commit()

@@ -34,12 +34,77 @@
       border: 1px solid #1e293b;
       padding: 10px;
     }
+
+    /* =============================
+       Status Panel - KAI Observability
+       ============================= */
+    #statusPanel {
+      display: flex;
+      gap: 16px;
+      margin-top: 16px;
+      padding: 12px;
+      background: #1e293b;
+      border-radius: 6px;
+      flex-wrap: wrap;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-label {
+      color: #94a3b8;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .badge--neutral {
+      background: #334155;
+      color: #94a3b8;
+    }
+    .badge--success {
+      background: #166534;
+      color: #bbf7d0;
+    }
+    .badge--warning {
+      background: #854d0e;
+      color: #fef08a;
+    }
+    .badge--info {
+      background: #1e40af;
+      color: #bfdbfe;
+    }
   </style>
 </head>
 
 <body>
 
 <h2>🧠 Vortex Clinical – Front LAB</h2>
+
+<label>
+  User ID (UUID):
+  <input type="text" id="userId" value="00000000-0000-0000-0000-000000000001" style="width: 320px;" />
+</label>
+
+<br><br>
+
+<label>
+  Rol:
+  <select id="userRole">
+    <option value="anonymous">anonymous</option>
+    <option value="secretary">secretary</option>
+    <option value="clinician" selected>clinician</option>
+    <option value="admin">admin</option>
+    <option value="manager">manager</option>
+  </select>
+</label>
+
+<br><br>
 
 <label>
   <input type="checkbox" id="useMemory" checked />
@@ -64,6 +129,29 @@
 <br>
 <button id="sendBtn">Enviar</button>
 
+<!-- =============================
+     Status Panel - KAI Observability
+     Shows: activator detection, mode, agent, permission status
+     ============================= -->
+<div id="statusPanel">
+  <div class="status-item">
+    <span class="status-label">KAI:</span>
+    <span id="kaiStatus" class="badge badge--neutral">—</span>
+  </div>
+  <div class="status-item">
+    <span class="status-label">Mode:</span>
+    <span id="modeStatus" class="badge badge--neutral">—</span>
+  </div>
+  <div class="status-item">
+    <span class="status-label">Agent:</span>
+    <span id="agentStatus" class="badge badge--neutral">—</span>
+  </div>
+  <div class="status-item">
+    <span class="status-label">Permission:</span>
+    <span id="permissionStatus" class="badge badge--neutral">—</span>
+  </div>
+</div>
+
 <div class="row">
   <div class="box">
     <h3>💬 Respuesta humana</h3>
@@ -84,21 +172,25 @@
 <script>
   document.getElementById("sendBtn").addEventListener("click", async () => {
     const text = document.getElementById("inputText").value;
+    const userId = document.getElementById("userId").value;
+    const role = document.getElementById("userRole").value;
     const useMemory = document.getElementById("useMemory").checked;
     const provider = document.getElementById("llmProvider").value;
 
+    // Payload for POST /lab endpoint
     const payload = {
-      user_id: "11111111-1111-1111-1111-111111111111",
-      procedure_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-      source: "text",
-      user_role: "leader",
       raw_text: text,
-      use_memory: useMemory,
-      llm_provider: provider
+      user_id: userId,
+      role: role,
+      options: {
+        use_memory: useMemory,
+        llm_provider: provider
+      }
     };
 
     try {
-      const res = await fetch("http://localhost:8000/api/procedures/voice", {
+      // FIX: Corrected endpoint from /api/procedures/voice to /lab
+      const res = await fetch("http://localhost:8000/lab", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -106,14 +198,63 @@
 
       const data = await res.json();
 
+      // =============================
+      // Update Status Panel badges
+      // =============================
+
+      // KAI activator detection
+      const kaiEl = document.getElementById("kaiStatus");
+      if (data.kai_called) {
+        kaiEl.innerText = "Detected";
+        kaiEl.className = "badge badge--success";
+      } else {
+        kaiEl.innerText = "Not detected";
+        kaiEl.className = "badge badge--neutral";
+      }
+
+      // Mode (LIFE vs WORK)
+      const modeEl = document.getElementById("modeStatus");
+      modeEl.innerText = data.mode || "—";
+      modeEl.className = data.mode === "LIFE"
+        ? "badge badge--info"
+        : "badge badge--success";
+
+      // Active agent
+      const agentEl = document.getElementById("agentStatus");
+      agentEl.innerText = data.agent || "—";
+      agentEl.className = "badge badge--info";
+
+      // Permission status (warning means blocked/fallback)
+      const permEl = document.getElementById("permissionStatus");
+      if (data.warning) {
+        permEl.innerText = "Blocked";
+        permEl.title = data.warning;  // Show full message on hover
+        permEl.className = "badge badge--warning";
+      } else {
+        permEl.innerText = "Accepted";
+        permEl.title = "";
+        permEl.className = "badge badge--success";
+      }
+
+      // =============================
+      // Update response panels
+      // =============================
       document.getElementById("humanResponse").innerText =
-        data.feedback?.message || "—";
+        data.response || "—";
 
       document.getElementById("json").innerText =
         JSON.stringify(data, null, 2);
 
+      // Build trace object from response fields
+      const trace = {
+        kai_called: data.kai_called,
+        agent: data.agent,
+        mode: data.mode,
+        warning: data.warning,
+        input: data.input
+      };
       document.getElementById("trace").innerText =
-        JSON.stringify(data.trace || {}, null, 2);
+        JSON.stringify(trace, null, 2);
 
     } catch (err) {
       alert("Error de red: " + err);

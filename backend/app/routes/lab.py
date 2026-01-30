@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -16,6 +18,7 @@ router = APIRouter()
 
 class LabPayload(BaseModel):
     raw_text: str
+    user_id: UUID | None = None
     role: str | None = "anonymous"
     options: dict | None = None
 
@@ -85,6 +88,18 @@ async def lab_post(request: Request, db: Session = Depends(get_db)):
         payload = LabPayload(
             raw_text=form.get("raw_text", ""),
             role=form.get("role", "anonymous"),
+        )
+
+    # -------------------------
+    # Validación LAB: user_id obligatorio
+    # -------------------------
+    if not payload.user_id:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "LAB_MISSING_USER_ID",
+                "detail": "user_id es obligatorio en entorno LAB. Provéelo desde el frontend.",
+            },
         )
 
     # -------------------------

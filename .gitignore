@@ -14,3 +14,5 @@ _pycache_/
 # Env vars
 .env
 .env.*
+# Claude Code local settings
+.claude/
