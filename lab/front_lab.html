@@ -308,6 +308,8 @@
   let isRecording = false;
   let recordingStartTime = null;
   let recordingTimer = null;
+  let autoStopTimer = null;
+  const MAX_RECORDING_MS = 60000; // 60 seconds limit
 
   const sendBtn = document.getElementById("sendBtn");
   const errorPanel = document.getElementById("errorPanel");
@@ -416,6 +418,23 @@
     recDuration.innerText = formatDuration(elapsed);
   }
 
+  function stopRecording(showMessage = false) {
+    // Stop recognition if active
+    if (recognition && isRecording) {
+      try {
+        recognition.stop();
+      } catch (e) {
+        // Ignore errors when stopping
+      }
+    }
+    // Clean up state
+    setRecording(false);
+    // Show feedback if auto-stopped
+    if (showMessage) {
+      showError("Grabación detenida: límite de 60 segundos alcanzado.");
+    }
+  }
+
   function setRecording(recording) {
     isRecording = recording;
     recordBtn.classList.toggle("recording", recording);
@@ -428,12 +447,20 @@
       recordingStartTime = Date.now();
       recDuration.innerText = "00:00";
       recordingTimer = setInterval(updateRecordingDuration, 1000);
+      // Auto-stop after 60 seconds
+      autoStopTimer = setTimeout(() => stopRecording(true), MAX_RECORDING_MS);
     } else {
       recLabel.innerText = "Grabar";
       recordingStartTime = null;
+      // Clear duration timer
       if (recordingTimer) {
         clearInterval(recordingTimer);
         recordingTimer = null;
+      }
+      // Clear auto-stop timer
+      if (autoStopTimer) {
+        clearTimeout(autoStopTimer);
+        autoStopTimer = null;
       }
     }
   }
@@ -453,8 +480,7 @@
 
     if (isRecording) {
       // Stop recording
-      recognition.stop();
-      setRecording(false);
+      stopRecording(false);
     } else {
       // Start recording
       hideError();
