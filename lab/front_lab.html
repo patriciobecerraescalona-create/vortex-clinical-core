@@ -315,6 +315,61 @@
   const recordBtn = document.getElementById("recordBtn");
   const recDuration = recordBtn.querySelector(".rec-duration");
   const recLabel = recordBtn.querySelector(".rec-label");
+  const inputText = document.getElementById("inputText");
+
+  // =============================
+  // Audio: Web Speech API Setup
+  // =============================
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let sttSupported = false;
+
+  if (SpeechRecognition) {
+    sttSupported = true;
+    recognition = new SpeechRecognition();
+    recognition.lang = "es-ES";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onresult = (event) => {
+      let finalTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      // Append final results to textarea
+      if (finalTranscript) {
+        const current = inputText.value;
+        const separator = current && !current.endsWith(" ") ? " " : "";
+        inputText.value = current + separator + finalTranscript;
+      }
+    };
+
+    recognition.onerror = (event) => {
+      const errorMessages = {
+        "no-speech": "No se detectó voz. Intenta hablar más fuerte.",
+        "audio-capture": "No se pudo acceder al micrófono.",
+        "not-allowed": "Permiso de micrófono denegado. Habilítalo en tu navegador.",
+        "network": "Error de red para el reconocimiento de voz.",
+        "aborted": "Grabación cancelada.",
+      };
+      const message = errorMessages[event.error] || `Error de STT: ${event.error}`;
+      showError(message);
+      setRecording(false);
+    };
+
+    recognition.onend = () => {
+      // If still marked as recording, recognition ended unexpectedly
+      if (isRecording) {
+        setRecording(false);
+      }
+    };
+  } else {
+    // Browser doesn't support Web Speech API
+    recordBtn.disabled = true;
+    recordBtn.title = "Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.";
+  }
 
   function setLoading(loading) {
     isLoading = loading;
@@ -390,15 +445,26 @@
     // Mutex: don't allow recording while loading
     if (isLoading) return;
 
+    // Check STT support
+    if (!sttSupported) {
+      showError("Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.");
+      return;
+    }
+
     if (isRecording) {
       // Stop recording
+      recognition.stop();
       setRecording(false);
-      // TODO: STT will be added in commit 4
     } else {
       // Start recording
       hideError();
       setRecording(true);
-      // TODO: STT will be added in commit 4
+      try {
+        recognition.start();
+      } catch (err) {
+        showError("Error al iniciar grabación: " + err.message);
+        setRecording(false);
+      }
     }
   });
 
