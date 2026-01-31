@@ -302,14 +302,26 @@
   let isLoading = false;
   const TIMEOUT_MS = 30000;
 
+  // =============================
+  // Audio: Recording State
+  // =============================
+  let isRecording = false;
+  let recordingStartTime = null;
+  let recordingTimer = null;
+
   const sendBtn = document.getElementById("sendBtn");
   const errorPanel = document.getElementById("errorPanel");
   const errorDetail = document.getElementById("errorDetail");
+  const recordBtn = document.getElementById("recordBtn");
+  const recDuration = recordBtn.querySelector(".rec-duration");
+  const recLabel = recordBtn.querySelector(".rec-label");
 
   function setLoading(loading) {
     isLoading = loading;
-    sendBtn.disabled = loading;
+    sendBtn.disabled = loading || isRecording;
     sendBtn.classList.toggle("loading", loading);
+    // Mutex: disable record while loading
+    recordBtn.disabled = loading;
   }
 
   function showError(message) {
@@ -332,6 +344,63 @@
     document.getElementById("permissionStatus").className = "badge badge--neutral";
     document.getElementById("permissionStatus").title = "";
   }
+
+  // =============================
+  // Audio: Recording Functions
+  // =============================
+  function formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  function updateRecordingDuration() {
+    if (!recordingStartTime) return;
+    const elapsed = Date.now() - recordingStartTime;
+    recDuration.innerText = formatDuration(elapsed);
+  }
+
+  function setRecording(recording) {
+    isRecording = recording;
+    recordBtn.classList.toggle("recording", recording);
+
+    // Mutex: disable send while recording
+    sendBtn.disabled = recording || isLoading;
+
+    if (recording) {
+      recLabel.innerText = "Detener";
+      recordingStartTime = Date.now();
+      recDuration.innerText = "00:00";
+      recordingTimer = setInterval(updateRecordingDuration, 1000);
+    } else {
+      recLabel.innerText = "Grabar";
+      recordingStartTime = null;
+      if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+      }
+    }
+  }
+
+  // =============================
+  // Audio: Record Button Handler
+  // =============================
+  recordBtn.addEventListener("click", () => {
+    // Mutex: don't allow recording while loading
+    if (isLoading) return;
+
+    if (isRecording) {
+      // Stop recording
+      setRecording(false);
+      // TODO: STT will be added in commit 4
+    } else {
+      // Start recording
+      hideError();
+      setRecording(true);
+      // TODO: STT will be added in commit 4
+    }
+  });
 
   // =============================
   // Main Submit Handler
