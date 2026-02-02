@@ -2,11 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # DB: Base y engine para inicialización de tablas
-from app.db.base import Base
-from app.db.session import engine
+from backend.app.db.base import Base
+from backend.app.db.session import engine
 
 # Modelos (importar para registrar en Base.metadata)
-from app.models import voice_event, memory_node, core  # noqa: F401
+from backend.app.models import voice_event, memory_node, core  # noqa: F401
 
 # =========================
 # APP INIT
@@ -41,15 +41,15 @@ def on_startup():
 # =========================
 
 # LAB Cognitivo
-from app.routes.lab import router as lab_router
+from backend.app.routes.lab import router as lab_router
 app.include_router(lab_router)
 
 # Timeline Clínico
-from app.routes.timeline import router as timeline_router
+from backend.app.routes.timeline import router as timeline_router
 app.include_router(timeline_router)
 
 # (futuro)
-# from app.routes.procedures import router as procedures_router
+# from backend.app.routes.procedures import router as procedures_router
 # app.include_router(procedures_router)
 
 # =========================

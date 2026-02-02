@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 
-from app.db.base import Base
+from backend.app.db.base import Base
 
 
 class VoiceEvent(Base):

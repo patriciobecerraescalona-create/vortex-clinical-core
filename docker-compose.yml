@@ -24,12 +24,15 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://vortex_user:vortex_pass@db:5432/vortex
+      OLLAMA_URL: http://192.168.1.8:11434
+      OLLAMA_MODEL: qwen2.5:3b
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - .:/workspace
+    working_dir: /workspace
     command: >
-      uvicorn app.main:app
+      uvicorn backend.app.main:app
       --host 0.0.0.0
       --port 8000
       --reload

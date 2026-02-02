@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy import String, Text, Boolean, Date, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
-from app.db.base import Base
+from backend.app.db.base import Base
 
 class Domain(Base):
     __tablename__ = "domains"

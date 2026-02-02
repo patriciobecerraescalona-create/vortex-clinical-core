@@ -3,7 +3,7 @@ from sqlalchemy import Column, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
-from app.db.base import Base
+from backend.app.db.base import Base
 
 
 class MemoryNode(Base):

@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from app.db.session import SessionLocal
-from app.models.voice_event import VoiceEvent
+from backend.app.db.session import SessionLocal
+from backend.app.models.voice_event import VoiceEvent
 
 router = APIRouter(prefix="/procedures", tags=["Timeline"])
 

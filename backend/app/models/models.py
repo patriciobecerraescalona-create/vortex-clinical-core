@@ -1,4 +1,4 @@
 # app/db/models.py
 
-from app.models.voice_event import VoiceEvent
-from app.models.memory_node import MemoryNode
+from backend.app.models.voice_event import VoiceEvent
+from backend.app.models.memory_node import MemoryNode

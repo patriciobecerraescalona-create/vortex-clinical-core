@@ -1,6 +1,6 @@
 from typing import Optional, Dict
 
-from app.services.agent_permissions import (
+from backend.app.services.agent_permissions import (
     resolve_agent,
     AgentPermissionError,
 )

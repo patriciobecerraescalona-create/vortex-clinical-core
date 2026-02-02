@@ -4,12 +4,12 @@ from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.voice_event import VoiceEvent
-from app.models.memory_node import MemoryNode
+from backend.app.models.voice_event import VoiceEvent
+from backend.app.models.memory_node import MemoryNode
 
-from app.services.kai_engine import process_kai_activation
-from app.services.agent_context import build_layer1_context
-from app.services.llm_agent import run_llm
+from backend.app.services.kai_engine import process_kai_activation
+from backend.app.services.agent_context import build_layer1_context
+from backend.app.services.llm_agent import run_llm
 
 
 def handle_voice_event(payload, db: Session) -> dict:
