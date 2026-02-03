@@ -636,7 +636,8 @@ let lastContextHash = '';
 let lastAnalysis = null;
 let lastUpdateTime = null;
 let pollingInterval = null;
-const POLL_INTERVAL_MS = 12000;  // 12 segundos
+let currentController = null;  // AbortController activo
+const POLL_INTERVAL_MS = 15000;  // 15 segundos (más espacio para análisis largo)
 
 function getPatientContext() {
   return {
@@ -689,14 +690,14 @@ function showStatus(status, message) {
 }
 
 function showLoading(isUpdate = false) {
-  const msg = isUpdate ? 'Actualizando análisis...' : 'Analizando...';
+  const msg = isUpdate ? 'Actualizando...' : 'Analizando razonamiento clínico profundo...';
   showStatus(isUpdate ? 'updating' : 'analyzing', msg);
 
   if (!lastAnalysis) {
     document.getElementById('observerContent').innerHTML = `
       <div class="observer-loading">
         <div class="spinner"></div>
-        <span>${msg}</span>
+        <span style="font-size:11px;">${msg}</span>
       </div>
     `;
   }
@@ -713,13 +714,15 @@ function updateObserverUI(analysis) {
   const phaseLabel = document.getElementById('phaseLabel');
   const content = document.getElementById('observerContent');
 
-  const llmStatus = analysis.llm_status || 'connected';
-  const isDisconnected = llmStatus !== 'connected';
+  // Estados: ok, waiting, error
+  const llmStatus = analysis.llm_status || 'ok';
+  const isError = llmStatus === 'error';
+  const isWaiting = llmStatus === 'waiting';
   const metrics = analysis.metrics || {};
 
-  // Semaforo
+  // Semaforo basado en visual_indicator
   semaforo.className = 'semaforo';
-  if (isDisconnected || analysis.visual_indicator === 'gray') {
+  if (isError || isWaiting || analysis.visual_indicator === 'gray') {
     semaforo.classList.add('gray');
   } else if (analysis.visual_indicator === 'yellow') {
     semaforo.classList.add('yellow');
@@ -727,38 +730,53 @@ function updateObserverUI(analysis) {
     semaforo.classList.add('red');
   }
 
-  // Badge OBSERVER
-  if (isDisconnected) {
-    phaseLabel.textContent = 'OFF';
+  // Badge según estado
+  if (isError) {
+    phaseLabel.textContent = 'ERROR';
     phaseLabel.style.background = '#7f1d1d';
     phaseLabel.style.color = '#fca5a5';
-  } else if (analysis.insufficient) {
+  } else if (isWaiting || analysis.insufficient) {
     phaseLabel.textContent = 'ESPERA';
     phaseLabel.style.background = '#334155';
     phaseLabel.style.color = '#94a3b8';
+  } else if (analysis.no_additional) {
+    phaseLabel.textContent = 'OK';
+    phaseLabel.style.background = '#14532d';
+    phaseLabel.style.color = '#86efac';
   } else {
     const ms = metrics.response_time_ms || 0;
     phaseLabel.textContent = ms > 0 ? `${(ms/1000).toFixed(1)}s` : 'OK';
-    phaseLabel.style.background = ms > 4000 ? '#7f1d1d' : '#14532d';
-    phaseLabel.style.color = ms > 4000 ? '#fca5a5' : '#86efac';
+    phaseLabel.style.background = ms > 4000 ? '#92400e' : '#14532d';
+    phaseLabel.style.color = ms > 4000 ? '#fde047' : '#86efac';
   }
 
   let html = '';
 
-  // Error state
-  if (isDisconnected) {
-    html = `<div class="observer-section"><div style="color:#f87171;font-size:12px;">${escapeHtml(analysis.llm_error || 'LLM no disponible')}</div></div>`;
+  // Error del LLM (no de infraestructura)
+  if (isError) {
+    html = `<div class="observer-section"><div style="color:#fca5a5;font-size:12px;">${escapeHtml(analysis.llm_error || 'Error del modelo')}</div></div>`;
     content.innerHTML = html;
     return;
   }
 
-  // Insufficient context
-  if (analysis.insufficient) {
+  // Waiting - contexto insuficiente (no se llamó al LLM)
+  if (isWaiting || analysis.insufficient) {
     const missing = Array.isArray(analysis.missing) ? analysis.missing : [];
     html = `
       <div class="observer-section insufficient-section">
         <div class="insufficient-msg">Completa anamnesis + impresión clínica</div>
         ${missing.length > 0 ? `<div class="missing-list">Falta: ${missing.join(', ')}</div>` : ''}
+      </div>
+    `;
+    content.innerHTML = html;
+    return;
+  }
+
+  // Sin aporte adicional (LLM respondió pero no hay info nueva)
+  if (analysis.no_additional) {
+    html = `
+      <div class="observer-section" style="text-align:center;padding:20px;">
+        <div style="color:#94a3b8;font-size:12px;">Sin aporte clínico adicional en este momento</div>
       </div>
     `;
     content.innerHTML = html;
@@ -848,7 +866,7 @@ function updateObserverUI(analysis) {
 }
 
 async function callObserver(force = false) {
-  if (observerLoading || currentMode !== 'sgmi') return;
+  if (currentMode !== 'sgmi') return;
 
   const ctx = getPatientContext();
   const currentHash = hashContext(ctx);
@@ -859,16 +877,33 @@ async function callObserver(force = false) {
     return;
   }
 
+  // Cancelar request anterior si existe
+  if (currentController) {
+    currentController.abort();
+    currentController = null;
+  }
+
+  // Bloquear nuevas requests mientras esta está activa
+  if (observerLoading) return;
   observerLoading = true;
+
   const isUpdate = lastAnalysis !== null;
   showLoading(isUpdate);
+
+  // Crear nuevo controller con timeout 60s
+  currentController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    if (currentController) currentController.abort();
+  }, 60000);
 
   try {
     const res = await fetch('/lab/observer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient_context: ctx, force: force })
+      body: JSON.stringify({ patient_context: ctx, force: force }),
+      signal: currentController.signal
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
@@ -877,42 +912,44 @@ async function callObserver(force = false) {
         lastContextHash = currentHash;
         lastUpdateTime = new Date();
         updateObserverUI(data.analysis);
-        showStatus('updated', `Actualizado · ${formatTime(lastUpdateTime)}`);
+
+        // Status según resultado del LLM
+        const llmStatus = data.analysis.llm_status || 'connected';
+        if (llmStatus === 'connected') {
+          const ms = data.analysis.metrics?.response_time_ms || 0;
+          showStatus('updated', `${(ms/1000).toFixed(1)}s · ${formatTime(lastUpdateTime)}`);
+        } else if (llmStatus === 'waiting') {
+          showStatus('idle', 'Esperando contexto');
+        } else {
+          showStatus('idle', 'LLM no disponible');
+        }
       }
     } else {
-      showStatus('error', 'Error de conexión');
-      if (!lastAnalysis) {
-        updateObserverUI({
-          summary: 'Error de conexión con el observador.',
-          patterns: [],
-          visual_indicator: 'gray',
-          notes: []
-        });
-      }
+      // Solo errores HTTP reales (no del LLM)
+      showStatus('error', `HTTP ${res.status}`);
     }
   } catch (err) {
-    showStatus('error', 'Error: ' + err.message);
-    if (!lastAnalysis) {
-      updateObserverUI({
-        summary: 'Error: ' + err.message,
-        patterns: [],
-        visual_indicator: 'gray',
-        notes: []
-      });
+    if (err.name === 'AbortError') {
+      // Request cancelada o timeout - no es error real
+      showStatus('idle', 'Cancelado');
+    } else {
+      // Error real de red/infraestructura
+      showStatus('error', 'Sin conexión al servidor');
     }
   } finally {
     observerLoading = false;
+    currentController = null;
   }
 }
 
 function pollObserver() {
   if (currentMode !== 'sgmi') return;
+  if (observerLoading) return;  // No polling mientras hay análisis activo
 
   if (hasContextChanged()) {
     callObserver(false);
-  } else {
-    showStatus('idle', `Sin cambios · ${formatTime(new Date())}`);
   }
+  // No mostrar "sin cambios" constantemente - solo cuando hay cambios reales
 }
 
 function startPolling() {
@@ -1050,22 +1087,25 @@ async def observer_analyze(request: ObserverRequest):
             patient_context=request.patient_context.model_dump(),
             force=request.force
         )
+        # Siempre 200 - el status interno indica el resultado
         return JSONResponse(content={
             "status": "ok",
             "analysis": result
         })
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": "OBSERVER_ERROR",
-                "detail": str(e),
-                "analysis": {
-                    "summary": "Error en el análisis.",
-                    "patterns": [],
-                    "visual_indicator": "green",
-                    "notes": [f"Error: {str(e)}"]
-                }
+        # Nunca 500 por errores de LLM - siempre 200 con status descriptivo
+        return JSONResponse(content={
+            "status": "ok",
+            "analysis": {
+                "llm_status": "error",
+                "llm_error": str(e),
+                "high_impact": [],
+                "alternatives": [],
+                "discriminators": [],
+                "management_paths": [],
+                "pivot_triggers": [],
+                "metrics": {"response_time_ms": 0, "eval_count": 0},
+                "visual_indicator": "gray",
+                "mode": "observer",
             }
-        )
+        })

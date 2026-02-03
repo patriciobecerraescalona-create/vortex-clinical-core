@@ -29,12 +29,17 @@ app.add_middleware(
 )
 
 # =========================
-# STARTUP: Crear tablas si no existen
+# STARTUP: Crear tablas + warmup Ollama
 # =========================
 @app.on_event("startup")
 def on_startup():
     """Crea las tablas en la BD si no existen (checkfirst=True por defecto)."""
     Base.metadata.create_all(bind=engine)
+
+    # Warmup Ollama en background (no bloquea startup)
+    import threading
+    from backend.agents.observer_agent import warmup_ollama
+    threading.Thread(target=warmup_ollama, daemon=True).start()
 
 # =========================
 # ROUTERS
