@@ -358,160 +358,166 @@ def lab_ui():
       line-height: 1.6;
     }
 
-    /* Experimental Mode - Clinical Reasoning */
-    .observer-reasoning {
-      font-size: 13px;
-      color: #cbd5e1;
-      line-height: 1.6;
-      padding: 12px;
-      background: #1e293b;
-      border-radius: 6px;
-      border-left: 3px solid #8b5cf6;
-    }
-
-    /* Differential Diagnoses */
-    .observer-diagnoses {
+    /* Clinical Scenarios */
+    .scenario-list {
       list-style: none;
       padding: 0;
       margin: 0;
     }
-    .observer-diagnoses li {
-      padding: 10px 12px;
-      background: #1e293b;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      font-size: 13px;
-      color: #e5e7eb;
-      border-left: 3px solid #64748b;
-    }
-    .observer-diagnoses li.prob-high {
-      border-left-color: #22c55e;
-    }
-    .observer-diagnoses li.prob-med {
-      border-left-color: #eab308;
-    }
-    .observer-diagnoses li.prob-low {
-      border-left-color: #64748b;
-    }
-    .prob-badge {
-      display: inline-block;
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-left: 8px;
-      text-transform: uppercase;
-      background: #334155;
-      color: #94a3b8;
-    }
-    .prob-high .prob-badge { background: #14532d; color: #86efac; }
-    .prob-med .prob-badge { background: #713f12; color: #fde047; }
-    .prob-low .prob-badge { background: #334155; color: #94a3b8; }
-    .justification {
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 6px;
-      font-style: italic;
-    }
-
-    /* Suggested Exams */
-    .observer-exams {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .observer-exams li {
-      padding: 10px 12px;
-      background: #1e293b;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      font-size: 13px;
-      color: #e5e7eb;
-      border-left: 3px solid #3b82f6;
-    }
-    .exam-type {
-      display: inline-block;
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-left: 8px;
-      text-transform: uppercase;
-      background: #1e3a5f;
-      color: #93c5fd;
-    }
-
-    /* Red Flags Section */
-    .red-flags-section {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 6px;
-      padding: 12px;
-    }
-    .observer-red-flags {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .observer-red-flags li {
-      padding: 8px 12px;
-      background: rgba(239, 68, 68, 0.15);
+    .scenario-list li {
+      padding: 8px 10px;
+      background: #0f172a;
       border-radius: 4px;
       margin-bottom: 6px;
       font-size: 12px;
-      color: #fca5a5;
+      color: #e5e7eb;
+    }
+    .scenario-why {
+      display: block;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .scenario-action {
+      font-size: 11px;
+      color: #67e8f9;
+      margin-top: 4px;
+      padding-left: 8px;
+      border-left: 2px solid #0891b2;
+    }
+
+    /* Critical (red) */
+    .scenario-critical {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .scenario-label-critical {
+      color: #f87171 !important;
+    }
+    .scenario-critical .scenario-list li {
       border-left: 3px solid #ef4444;
     }
 
-    /* Confidence Badge */
-    .confidence-badge {
-      display: inline-block;
-      padding: 6px 12px;
+    /* Intermediate (yellow) */
+    .scenario-intermediate {
+      background: rgba(234, 179, 8, 0.08);
+      border: 1px solid rgba(234, 179, 8, 0.25);
       border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
+      padding: 10px;
     }
-    .confidence-badge.conf-high {
-      background: #14532d;
-      color: #86efac;
+    .scenario-label-intermediate {
+      color: #fbbf24 !important;
     }
-    .confidence-badge.conf-med {
-      background: #713f12;
-      color: #fde047;
-    }
-    .confidence-badge.conf-low {
-      background: #7f1d1d;
-      color: #fca5a5;
+    .scenario-intermediate .scenario-list li {
+      border-left: 3px solid #eab308;
     }
 
-    /* Missing Info */
-    .missing-info {
-      font-size: 12px;
-      color: #94a3b8;
-      padding: 8px 12px;
-      background: #1e293b;
+    /* Manageable (green) */
+    .scenario-manageable {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.25);
       border-radius: 6px;
-      line-height: 1.5;
+      padding: 10px;
+    }
+    .scenario-label-manageable {
+      color: #4ade80 !important;
+    }
+    .scenario-manageable .scenario-list li {
+      border-left: 3px solid #22c55e;
+    }
+
+    /* Alert Findings */
+    .alert-findings {
+      background: rgba(251, 146, 60, 0.1);
+      border: 1px solid rgba(251, 146, 60, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .alert-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .alert-list li {
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #fdba74;
+      border-left: 2px solid #f97316;
+      margin-bottom: 4px;
+    }
+
+    /* Workup */
+    .workup-section {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .workup-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .workup-list li {
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #e5e7eb;
+      border-left: 2px solid #3b82f6;
+      margin-bottom: 4px;
+    }
+
+    /* Clinical Keys */
+    .keys-section {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .clinical-keys {
+      font-size: 12px;
+      color: #a5b4fc;
+      line-height: 1.6;
+    }
+
+    /* References */
+    .refs-section {
+      background: transparent;
+      padding: 8px 0;
+    }
+    .clinical-refs {
+      font-size: 11px;
+      color: #64748b;
+      font-style: italic;
+    }
+
+    /* Data Gaps */
+    .gaps-section {
+      background: rgba(239, 68, 68, 0.05);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .data-gaps {
+      font-size: 12px;
+      color: #fca5a5;
     }
 
     /* Cognitive Section */
     .cognitive-section {
-      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+      background: #1e1b4b;
       border: 1px solid #4338ca;
-      border-radius: 6px;
-      padding: 12px;
+      border-radius: 4px;
+      padding: 8px;
     }
     .cognitive-metrics {
       display: flex;
-      flex-wrap: wrap;
       gap: 8px;
     }
     .metric {
-      font-size: 11px;
-      padding: 4px 10px;
+      font-size: 10px;
+      padding: 2px 6px;
       background: rgba(99, 102, 241, 0.2);
       color: #a5b4fc;
-      border-radius: 4px;
-      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 3px;
     }
 
     /* Hidden */
@@ -741,11 +747,10 @@ function updateObserverUI(analysis) {
   const phaseLabel = document.getElementById('phaseLabel');
   const content = document.getElementById('observerContent');
 
-  // Check LLM status
   const llmStatus = analysis.llm_status || 'connected';
   const isDisconnected = llmStatus !== 'connected';
 
-  // Semaforo
+  // Semaforo por escenarios
   semaforo.className = 'semaforo';
   if (isDisconnected || analysis.visual_indicator === 'gray') {
     semaforo.classList.add('gray');
@@ -755,15 +760,15 @@ function updateObserverUI(analysis) {
     semaforo.classList.add('red');
   }
 
-  // Phase label - EXPERIMENTAL mode
+  // Badge
   if (isDisconnected) {
     phaseLabel.textContent = 'LLM: OFF';
     phaseLabel.style.background = '#7f1d1d';
     phaseLabel.style.color = '#fca5a5';
   } else {
-    phaseLabel.textContent = 'EXPERIMENTAL';
-    phaseLabel.style.background = '#7c3aed';
-    phaseLabel.style.color = '#e9d5ff';
+    phaseLabel.textContent = 'CLINICAL';
+    phaseLabel.style.background = '#0f766e';
+    phaseLabel.style.color = '#99f6e4';
   }
 
   let html = '';
@@ -778,126 +783,154 @@ function updateObserverUI(analysis) {
         </div>
       </div>
       <div class="observer-empty" style="margin-top: 16px;">
-        Verifica que Ollama esté corriendo:<br>
-        <code style="background:#1e293b;padding:4px 8px;border-radius:4px;margin-top:8px;display:inline-block;">ollama serve</code>
+        <code style="background:#1e293b;padding:4px 8px;border-radius:4px;">ollama serve</code>
       </div>
     `;
     content.innerHTML = html;
     return;
   }
 
-  // Summary
-  if (analysis.summary) {
-    html += `
-      <div class="observer-section">
-        <div class="observer-label">Resumen</div>
-        <div class="observer-summary">${escapeHtml(analysis.summary)}</div>
-      </div>
-    `;
-  }
+  const scenarios = analysis.scenarios || {};
 
-  // Clinical Reasoning
-  if (analysis.clinical_reasoning) {
+  // CRÍTICO (rojo)
+  const critical = Array.isArray(scenarios.critical) ? scenarios.critical : [];
+  if (critical.length > 0) {
     html += `
-      <div class="observer-section">
-        <div class="observer-label">Razonamiento Clínico</div>
-        <div class="observer-reasoning">${escapeHtml(analysis.clinical_reasoning)}</div>
-      </div>
-    `;
-  }
-
-  // Differential Diagnoses
-  const diagnoses = Array.isArray(analysis.differential_diagnoses)
-    ? analysis.differential_diagnoses : [];
-  if (diagnoses.length > 0) {
-    html += `
-      <div class="observer-section">
-        <div class="observer-label">Diagnósticos Diferenciales</div>
-        <ul class="observer-diagnoses">
-          ${diagnoses.map(d => {
-            if (typeof d === 'object' && d.diagnosis) {
-              const prob = d.probability || '';
-              const probClass = prob.toLowerCase().includes('alta') ? 'prob-high' :
-                               prob.toLowerCase().includes('media') ? 'prob-med' : 'prob-low';
-              return `<li class="${probClass}">
-                <strong>${escapeHtml(d.diagnosis)}</strong>
-                ${prob ? `<span class="prob-badge">${escapeHtml(prob)}</span>` : ''}
-                ${d.justification ? `<div class="justification">${escapeHtml(d.justification)}</div>` : ''}
-              </li>`;
-            }
-            return `<li>${escapeHtml(String(d))}</li>`;
-          }).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  // Suggested Exams
-  const exams = Array.isArray(analysis.suggested_exams) ? analysis.suggested_exams : [];
-  if (exams.length > 0) {
-    html += `
-      <div class="observer-section">
-        <div class="observer-label">Estudios Sugeridos</div>
-        <ul class="observer-exams">
-          ${exams.map(e => {
-            if (typeof e === 'object' && e.exam) {
+      <div class="observer-section scenario-critical">
+        <div class="observer-label scenario-label-critical">Escenarios Críticos</div>
+        <ul class="scenario-list">
+          ${critical.map(s => {
+            if (typeof s === 'object') {
               return `<li>
-                <strong>${escapeHtml(e.exam)}</strong>
-                ${e.type ? `<span class="exam-type">${escapeHtml(e.type)}</span>` : ''}
-                ${e.justification ? `<div class="justification">${escapeHtml(e.justification)}</div>` : ''}
+                <strong>${escapeHtml(s.condition || '')}</strong>
+                ${s.why ? `<span class="scenario-why">${escapeHtml(s.why)}</span>` : ''}
+                ${s.action ? `<div class="scenario-action">${escapeHtml(s.action)}</div>` : ''}
               </li>`;
             }
-            return `<li>${escapeHtml(String(e))}</li>`;
+            return `<li>${escapeHtml(String(s))}</li>`;
           }).join('')}
         </ul>
       </div>
     `;
   }
 
-  // Red Flags
-  const redFlags = Array.isArray(analysis.red_flags) ? analysis.red_flags : [];
-  if (redFlags.length > 0) {
+  // INTERMEDIO (amarillo)
+  const intermediate = Array.isArray(scenarios.intermediate) ? scenarios.intermediate : [];
+  if (intermediate.length > 0) {
     html += `
-      <div class="observer-section red-flags-section">
-        <div class="observer-label" style="color:#f87171;">Banderas Rojas</div>
-        <ul class="observer-red-flags">
-          ${redFlags.map(f => `<li>${escapeHtml(String(f))}</li>`).join('')}
+      <div class="observer-section scenario-intermediate">
+        <div class="observer-label scenario-label-intermediate">Escenarios Intermedios</div>
+        <ul class="scenario-list">
+          ${intermediate.map(s => {
+            if (typeof s === 'object') {
+              return `<li>
+                <strong>${escapeHtml(s.condition || '')}</strong>
+                ${s.why ? `<span class="scenario-why">${escapeHtml(s.why)}</span>` : ''}
+                ${s.action ? `<div class="scenario-action">${escapeHtml(s.action)}</div>` : ''}
+              </li>`;
+            }
+            return `<li>${escapeHtml(String(s))}</li>`;
+          }).join('')}
         </ul>
       </div>
     `;
   }
 
-  // Confidence & Missing Info
-  if (analysis.confidence_level || (analysis.missing_info && analysis.missing_info.length > 0)) {
-    html += `<div class="observer-section">`;
-    if (analysis.confidence_level) {
-      const confClass = analysis.confidence_level.toLowerCase().includes('alta') ? 'conf-high' :
-                       analysis.confidence_level.toLowerCase().includes('media') ? 'conf-med' : 'conf-low';
-      html += `
-        <div class="observer-label">Nivel de Certeza</div>
-        <div class="confidence-badge ${confClass}">${escapeHtml(analysis.confidence_level)}</div>
-      `;
-    }
-    const missing = Array.isArray(analysis.missing_info) ? analysis.missing_info : [];
-    if (missing.length > 0) {
-      html += `
-        <div class="observer-label" style="margin-top:12px;">Información Faltante</div>
-        <div class="missing-info">${missing.map(m => escapeHtml(String(m))).join(' · ')}</div>
-      `;
-    }
-    html += `</div>`;
+  // MANEJABLE (verde)
+  const manageable = Array.isArray(scenarios.manageable) ? scenarios.manageable : [];
+  if (manageable.length > 0) {
+    html += `
+      <div class="observer-section scenario-manageable">
+        <div class="observer-label scenario-label-manageable">Escenarios Manejables</div>
+        <ul class="scenario-list">
+          ${manageable.map(s => {
+            if (typeof s === 'object') {
+              return `<li>
+                <strong>${escapeHtml(s.condition || '')}</strong>
+                ${s.why ? `<span class="scenario-why">${escapeHtml(s.why)}</span>` : ''}
+                ${s.action ? `<div class="scenario-action">${escapeHtml(s.action)}</div>` : ''}
+              </li>`;
+            }
+            return `<li>${escapeHtml(String(s))}</li>`;
+          }).join('')}
+        </ul>
+      </div>
+    `;
   }
 
-  // Cognitive Behavior (for research)
+  // Hallazgos de alerta
+  const alerts = Array.isArray(analysis.alert_findings) ? analysis.alert_findings : [];
+  if (alerts.length > 0) {
+    html += `
+      <div class="observer-section alert-findings">
+        <div class="observer-label">Hallazgos de Alerta</div>
+        <ul class="alert-list">
+          ${alerts.map(a => `<li>${escapeHtml(String(a))}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  // Orientación diagnóstica (workup)
+  const workup = Array.isArray(analysis.workup) ? analysis.workup : [];
+  if (workup.length > 0) {
+    html += `
+      <div class="observer-section workup-section">
+        <div class="observer-label">Orientación Diagnóstica</div>
+        <ul class="workup-list">
+          ${workup.map(w => {
+            if (typeof w === 'object' && w.study) {
+              return `<li><strong>${escapeHtml(w.study)}</strong>${w.target ? ` → ${escapeHtml(w.target)}` : ''}</li>`;
+            }
+            return `<li>${escapeHtml(String(w))}</li>`;
+          }).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  // Claves clínicas
+  const keys = Array.isArray(analysis.clinical_keys) ? analysis.clinical_keys : [];
+  if (keys.length > 0) {
+    html += `
+      <div class="observer-section keys-section">
+        <div class="observer-label">Claves Clínicas</div>
+        <div class="clinical-keys">${keys.map(k => escapeHtml(String(k))).join(' · ')}</div>
+      </div>
+    `;
+  }
+
+  // Referencias
+  const refs = Array.isArray(analysis.references) ? analysis.references : [];
+  if (refs.length > 0) {
+    html += `
+      <div class="observer-section refs-section">
+        <div class="observer-label">Referencias</div>
+        <div class="clinical-refs">${refs.map(r => escapeHtml(String(r))).join(' · ')}</div>
+      </div>
+    `;
+  }
+
+  // Datos faltantes
+  const gaps = Array.isArray(analysis.data_gaps) ? analysis.data_gaps : [];
+  if (gaps.length > 0) {
+    html += `
+      <div class="observer-section gaps-section">
+        <div class="observer-label">Datos Críticos Faltantes</div>
+        <div class="data-gaps">${gaps.map(g => escapeHtml(String(g))).join(' · ')}</div>
+      </div>
+    `;
+  }
+
+  // Cognitive Behavior (research)
   if (analysis.cognitive_behavior && Object.keys(analysis.cognitive_behavior).length > 0) {
     const cb = analysis.cognitive_behavior;
     html += `
       <div class="observer-section cognitive-section">
-        <div class="observer-label">Comportamiento Cognitivo</div>
+        <div class="observer-label">Cognitivo</div>
         <div class="cognitive-metrics">
-          <span class="metric">Incertidumbre: ${cb.uncertainty_markers?.length || 0}</span>
-          <span class="metric">Fabricación: ${cb.fabrication_markers?.length || 0}</span>
-          <span class="metric">${cb.confidence_assessment || 'N/A'}</span>
+          <span class="metric">U:${cb.uncertainty_markers?.length || 0}</span>
+          <span class="metric">F:${cb.fabrication_markers?.length || 0}</span>
         </div>
       </div>
     `;

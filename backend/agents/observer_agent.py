@@ -21,61 +21,55 @@ from typing import Dict, Any, Optional, List
 # =========================
 OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://192.168.1.8:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
-OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "60.0"))
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
 
 # =========================
-# PROMPT EXPERIMENTAL - LLM LIBRE
+# PROMPT CLÍNICO SENIOR
 # =========================
-PROMPT_EXPERIMENTAL = """Eres un médico clínico experimentado participando en una discusión de caso clínico.
-Analiza el siguiente caso como lo harías en una sesión clínica entre colegas.
+PROMPT_CLINICAL = """Eres un internista senior en discusión de caso con colegas.
+NO repitas la información del caso. Aporta criterio clínico.
 
-IMPORTANTE: Este es un entorno experimental de investigación cognitiva.
-No hay restricciones en tu razonamiento clínico.
+ESTRUCTURA DE RESPUESTA:
 
-Tu análisis debe incluir:
+1. ESCENARIOS CLÍNICOS (ordenados por urgencia)
+   - CRÍTICO (rojo): Condiciones que requieren acción inmediata
+   - INTERMEDIO (amarillo): Requieren evaluación prioritaria
+   - MANEJABLE (verde): Abordaje ambulatorio razonable
 
-1. RAZONAMIENTO CLÍNICO
-   - Análisis semiológico de los síntomas
-   - Integración de antecedentes relevantes
-   - Fisiopatología probable
+2. HALLAZGOS DE ALERTA
+   - Signos/síntomas que modifican la conducta
+   - Combinaciones semiológicas de riesgo
 
-2. DIAGNÓSTICOS DIFERENCIALES
-   - Lista ordenada por probabilidad
-   - Justificación breve de cada uno
-   - Señalar si hay datos insuficientes
+3. ORIENTACIÓN DIAGNÓSTICA
+   - Estudios clave (no exhaustivos)
+   - Qué buscar en cada uno
+   - Secuencia lógica
 
-3. ESTUDIOS SUGERIDOS
-   - Laboratorio
-   - Imágenes
-   - Otros estudios complementarios
-   - Justificación clínica
+4. REFERENCIAS
+   - Guías o criterios clínicos relevantes (nombre corto)
+   - Sin URLs
 
-4. BANDERAS ROJAS (si aplica)
-   - Signos de alarma
-   - Urgencias a descartar
+REGLAS:
+- Frases cortas, lenguaje de pase de visita
+- Prioriza lo que cambia conducta
+- No describas lo obvio
+- Si faltan datos críticos, dilo primero
 
-5. NIVEL DE CERTEZA
-   - Indica tu confianza en el análisis (alta/media/baja)
-   - Menciona qué información adicional necesitarías
-
-Responde en JSON con esta estructura exacta:
+Responde en JSON:
 {
-  "clinical_reasoning": "texto con el razonamiento clínico completo",
-  "differential_diagnoses": [
-    {"diagnosis": "nombre", "probability": "alta/media/baja", "justification": "por qué"}
-  ],
-  "suggested_exams": [
-    {"exam": "nombre", "type": "lab/imagen/otro", "justification": "por qué"}
-  ],
-  "red_flags": ["lista de banderas rojas si aplica"],
-  "confidence_level": "alta/media/baja",
-  "missing_info": ["información que falta para un mejor análisis"],
-  "evidence_references": ["guías o evidencia mencionada, si aplica"],
-  "summary": "resumen ejecutivo de 2-3 líneas"
+  "scenarios": {
+    "critical": [{"condition": "nombre", "why": "razón breve", "action": "conducta"}],
+    "intermediate": [{"condition": "nombre", "why": "razón breve", "action": "conducta"}],
+    "manageable": [{"condition": "nombre", "why": "razón breve", "action": "conducta"}]
+  },
+  "alert_findings": ["hallazgo que modifica conducta"],
+  "workup": [{"study": "nombre", "target": "qué buscar"}],
+  "clinical_keys": ["perla clínica o criterio importante"],
+  "references": ["Guía/Criterio relevante"],
+  "data_gaps": ["dato crítico faltante"]
 }
 
-NOTA TÉCNICA: Este análisis es para investigación sobre capacidades cognitivas de LLM.
-No constituye consejo médico real."""
+CONTEXTO: Investigación cognitiva LLM. No es consejo médico real."""
 
 # =========================
 # PATRONES DE COMPORTAMIENTO COGNITIVO
@@ -222,7 +216,7 @@ class ObserverAgent:
         # Llamar a Ollama
         try:
             raw_response = self._call_ollama(context_text)
-            result = self._parse_experimental_response(raw_response)
+            result = self._parse_clinical_response(raw_response)
 
             # Análisis cognitivo
             cognitive_analysis = self.cognitive_logger.analyze_response(
@@ -230,7 +224,7 @@ class ObserverAgent:
             )
             result["cognitive_behavior"] = cognitive_analysis
             result["llm_status"] = "connected"
-            result["mode"] = "experimental"
+            result["mode"] = "clinical"
             result["raw_response"] = raw_response[:1000]  # Guardar muestra
 
         except httpx.ConnectError:
@@ -252,18 +246,17 @@ class ObserverAgent:
     def _error_response(self, status: str, message: str) -> dict:
         """Genera respuesta de error estructurada."""
         return {
-            "summary": "Error de análisis",
-            "clinical_reasoning": "",
-            "differential_diagnoses": [],
-            "suggested_exams": [],
-            "red_flags": [],
-            "confidence_level": "none",
-            "missing_info": [],
-            "evidence_references": [],
+            "scenarios": {"critical": [], "intermediate": [], "manageable": []},
+            "alert_findings": [],
+            "workup": [],
+            "clinical_keys": [],
+            "references": [],
+            "data_gaps": [],
             "cognitive_behavior": {},
+            "visual_indicator": "gray",
             "llm_status": status,
             "llm_error": message,
-            "mode": "experimental",
+            "mode": "clinical",
         }
 
     def _format_context(self, patient_context: dict) -> str:
@@ -298,7 +291,7 @@ class ObserverAgent:
         """Llama a Ollama API."""
         url = f"{self.base_url}/api/generate"
 
-        prompt = f"{PROMPT_EXPERIMENTAL}\n\n--- CASO CLÍNICO ---\n{context_text}\n\n--- FIN DEL CASO ---\n\nResponde en JSON:"
+        prompt = f"{PROMPT_CLINICAL}\n\n--- CASO ---\n{context_text}\n---\n\nJSON:"
 
         payload = {
             "model": self.model,
@@ -323,54 +316,47 @@ class ObserverAgent:
             return [value] if value.strip() else []
         return [str(value)]
 
-    def _parse_experimental_response(self, response_text: str) -> dict:
-        """Parsea respuesta experimental con estructura completa."""
+    def _parse_clinical_response(self, response_text: str) -> dict:
+        """Parsea respuesta clínica jerarquizada."""
         try:
             result = json.loads(response_text)
+            scenarios = result.get("scenarios", {})
 
             return {
-                "summary": str(result.get("summary", "Sin resumen")),
-                "clinical_reasoning": str(result.get("clinical_reasoning", "")),
-                "differential_diagnoses": self._normalize_list(
-                    result.get("differential_diagnoses", [])
-                ),
-                "suggested_exams": self._normalize_list(
-                    result.get("suggested_exams", [])
-                ),
-                "red_flags": self._normalize_list(result.get("red_flags", [])),
-                "confidence_level": str(result.get("confidence_level", "unknown")),
-                "missing_info": self._normalize_list(result.get("missing_info", [])),
-                "evidence_references": self._normalize_list(
-                    result.get("evidence_references", [])
-                ),
-                "visual_indicator": self._determine_indicator(result),
+                "scenarios": {
+                    "critical": self._normalize_list(scenarios.get("critical", [])),
+                    "intermediate": self._normalize_list(scenarios.get("intermediate", [])),
+                    "manageable": self._normalize_list(scenarios.get("manageable", [])),
+                },
+                "alert_findings": self._normalize_list(result.get("alert_findings", [])),
+                "workup": self._normalize_list(result.get("workup", [])),
+                "clinical_keys": self._normalize_list(result.get("clinical_keys", [])),
+                "references": self._normalize_list(result.get("references", [])),
+                "data_gaps": self._normalize_list(result.get("data_gaps", [])),
+                "visual_indicator": self._determine_indicator_v2(scenarios),
             }
         except json.JSONDecodeError:
-            # Si falla, intentar extraer lo que se pueda
             return {
-                "summary": "Respuesta no estructurada del modelo.",
-                "clinical_reasoning": response_text[:500] if response_text else "",
-                "differential_diagnoses": [],
-                "suggested_exams": [],
-                "red_flags": [],
-                "confidence_level": "unknown",
-                "missing_info": ["Respuesta no parseada correctamente"],
-                "evidence_references": [],
+                "scenarios": {"critical": [], "intermediate": [], "manageable": []},
+                "alert_findings": [],
+                "workup": [],
+                "clinical_keys": [],
+                "references": [],
+                "data_gaps": ["Respuesta no estructurada"],
                 "visual_indicator": "yellow",
+                "parse_error": response_text[:300] if response_text else "Sin respuesta",
             }
 
-    def _determine_indicator(self, result: dict) -> str:
-        """Determina indicador visual basado en el análisis."""
-        red_flags = result.get("red_flags", [])
-        confidence = str(result.get("confidence_level", "")).lower()
+    def _determine_indicator_v2(self, scenarios: dict) -> str:
+        """Determina indicador visual basado en escenarios clínicos."""
+        critical = scenarios.get("critical", [])
+        intermediate = scenarios.get("intermediate", [])
 
-        if red_flags and len(red_flags) > 0:
+        if critical and len(critical) > 0:
             return "red"
-        elif confidence == "baja" or confidence == "low":
+        elif intermediate and len(intermediate) > 0:
             return "yellow"
-        elif confidence == "alta" or confidence == "high":
-            return "green"
-        return "yellow"
+        return "green"
 
     def get_cognitive_summary(self) -> Dict[str, Any]:
         """Obtiene resumen del comportamiento cognitivo."""
@@ -414,16 +400,14 @@ class ThrottledObserver:
             self._last_context_str = context_str
 
         return self._cached_result or {
-            "summary": "Esperando entrada...",
-            "clinical_reasoning": "",
-            "differential_diagnoses": [],
-            "suggested_exams": [],
-            "red_flags": [],
-            "confidence_level": "none",
-            "missing_info": [],
-            "evidence_references": [],
+            "scenarios": {"critical": [], "intermediate": [], "manageable": []},
+            "alert_findings": [],
+            "workup": [],
+            "clinical_keys": [],
+            "references": [],
+            "data_gaps": [],
             "visual_indicator": "gray",
-            "mode": "experimental",
+            "mode": "clinical",
         }
 
     def get_cognitive_summary(self) -> Dict[str, Any]:
