@@ -14,62 +14,58 @@ import time
 import re
 import httpx
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 # =========================
 # CONFIGURACIÓN OLLAMA
 # =========================
 OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://192.168.1.8:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
-OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "30.0"))  # 30s max, objetivo <4s
 
 # =========================
-# PROMPT CLÍNICO SENIOR
+# PROMPT OBSERVADOR CLÍNICO DEFINITIVO
 # =========================
-PROMPT_CLINICAL = """Eres un internista senior en discusión de caso con colegas.
-NO repitas la información del caso. Aporta criterio clínico.
+PROMPT_OBSERVER = """NUNCA repitas información del contexto. El médico ya la conoce.
+Tu rol comienza donde termina la anamnesis.
 
-ESTRUCTURA DE RESPUESTA:
+Eres OBSERVADOR DE CONTRASTE clínico senior.
+NO resumes. NO confirmas obviedades. NO prescribes.
 
-1. ESCENARIOS CLÍNICOS (ordenados por urgencia)
-   - CRÍTICO (rojo): Condiciones que requieren acción inmediata
-   - INTERMEDIO (amarillo): Requieren evaluación prioritaria
-   - MANEJABLE (verde): Abordaje ambulatorio razonable
+PROHIBIDO usar frases como:
+- "Paciente con..."
+- "Se observa..."
+- "Cuadro compatible con..."
+- "Según la anamnesis..."
 
-2. HALLAZGOS DE ALERTA
-   - Signos/síntomas que modifican la conducta
-   - Combinaciones semiológicas de riesgo
-
-3. ORIENTACIÓN DIAGNÓSTICA
-   - Estudios clave (no exhaustivos)
-   - Qué buscar en cada uno
-   - Secuencia lógica
-
-4. REFERENCIAS
-   - Guías o criterios clínicos relevantes (nombre corto)
-   - Sin URLs
-
-REGLAS:
-- Frases cortas, lenguaje de pase de visita
-- Prioriza lo que cambia conducta
-- No describas lo obvio
-- Si faltan datos críticos, dilo primero
-
-Responde en JSON:
+ESTRUCTURA EXACTA (JSON):
 {
-  "scenarios": {
-    "critical": [{"condition": "nombre", "why": "razón breve", "action": "conducta"}],
-    "intermediate": [{"condition": "nombre", "why": "razón breve", "action": "conducta"}],
-    "manageable": [{"condition": "nombre", "why": "razón breve", "action": "conducta"}]
-  },
-  "alert_findings": ["hallazgo que modifica conducta"],
-  "workup": [{"study": "nombre", "target": "qué buscar"}],
-  "clinical_keys": ["perla clínica o criterio importante"],
-  "references": ["Guía/Criterio relevante"],
-  "data_gaps": ["dato crítico faltante"]
+  "high_impact": [{"scenario": "dx", "rationale": "por qué considerar"}],
+  "alternatives": [{"scenario": "dx", "rationale": "si evolución atípica"}],
+  "discriminators": [{"test": "estudio", "differentiates": "qué distingue"}],
+  "management_paths": [{"path": "conducta", "when": "en qué escenario"}],
+  "pivot_triggers": ["hallazgo que obliga a re-priorizar"]
 }
 
-CONTEXTO: Investigación cognitiva LLM. No es consejo médico real."""
+REGLAS:
+- Máximo 5 items por categoría
+- Frases de máximo 15 palabras
+- Solo información NO OBVIA
+- Lenguaje de pase de guardia
+
+Si contexto insuficiente: {"insufficient": true, "missing": ["qué falta"]}"""
+
+# Patrones prohibidos en respuesta (redundancia)
+FORBIDDEN_PATTERNS = [
+    r"^paciente (con|de|que|presenta)",
+    r"^se (observa|evidencia|aprecia|presenta)",
+    r"^cuadro (compatible|sugestivo|clínico)",
+    r"^según (la anamnesis|el examen|los datos)",
+    r"^el paciente",
+    r"^la paciente",
+    r"^presenta",
+    r"^refiere",
+]
 
 # =========================
 # PATRONES DE COMPORTAMIENTO COGNITIVO
@@ -207,25 +203,55 @@ class ObserverAgent:
 
     def analyze(self, patient_context: dict) -> dict:
         """
-        Análisis clínico experimental sin restricciones.
-        Captura razonamiento completo del LLM.
+        Contraste clínico: amplía el razonamiento del médico.
+        Solo se activa con contexto suficiente (anamnesis + impresión).
         """
+        # Verificar contexto suficiente
+        if not self._has_sufficient_context(patient_context):
+            missing = []
+            if not patient_context.get("clinical_text", "").strip():
+                missing.append("Anamnesis")
+            if not patient_context.get("clinical_impression", "").strip():
+                missing.append("Impresión clínica inicial")
+            return {
+                "insufficient": True,
+                "missing": missing,
+                "metrics": {"response_time_ms": 0, "eval_count": 0},
+                "visual_indicator": "gray",
+                "llm_status": "waiting",
+                "mode": "observer",
+            }
+
         # Preparar contexto
         context_text = self._format_context(patient_context)
 
         # Llamar a Ollama
         try:
-            raw_response = self._call_ollama(context_text)
-            result = self._parse_clinical_response(raw_response)
+            raw_response, metrics = self._call_ollama(context_text)
+
+            # Validar respuesta (sin patrones prohibidos)
+            is_valid, validation_error = self._validate_response(raw_response)
+            if not is_valid:
+                result = {
+                    "validation_error": validation_error,
+                    "high_impact": [],
+                    "alternatives": [],
+                    "discriminators": [],
+                    "management_paths": [],
+                    "pivot_triggers": [],
+                    "visual_indicator": "yellow",
+                }
+            else:
+                result = self._parse_observer_response(raw_response)
 
             # Análisis cognitivo
             cognitive_analysis = self.cognitive_logger.analyze_response(
                 raw_response, patient_context
             )
             result["cognitive_behavior"] = cognitive_analysis
+            result["metrics"] = metrics
             result["llm_status"] = "connected"
-            result["mode"] = "clinical"
-            result["raw_response"] = raw_response[:1000]  # Guardar muestra
+            result["mode"] = "observer"
 
         except httpx.ConnectError:
             result = self._error_response(
@@ -246,65 +272,93 @@ class ObserverAgent:
     def _error_response(self, status: str, message: str) -> dict:
         """Genera respuesta de error estructurada."""
         return {
-            "scenarios": {"critical": [], "intermediate": [], "manageable": []},
-            "alert_findings": [],
-            "workup": [],
-            "clinical_keys": [],
-            "references": [],
-            "data_gaps": [],
+            "high_impact": [],
+            "alternatives": [],
+            "discriminators": [],
+            "management_paths": [],
+            "pivot_triggers": [],
+            "metrics": {"response_time_ms": 0, "eval_count": 0},
             "cognitive_behavior": {},
             "visual_indicator": "gray",
             "llm_status": status,
             "llm_error": message,
-            "mode": "clinical",
+            "mode": "observer",
         }
 
     def _format_context(self, patient_context: dict) -> str:
-        """Formatea el contexto del paciente."""
+        """Formatea el contexto del paciente para contraste."""
         parts = []
 
-        if patient_context.get("patient_name"):
-            parts.append(f"Paciente: {patient_context['patient_name']}")
-
+        # Datos básicos (compacto)
+        basic = []
         if patient_context.get("age"):
-            parts.append(f"Edad: {patient_context['age']} años")
-
+            basic.append(f"{patient_context['age']}a")
         if patient_context.get("sex"):
-            sex_map = {"M": "Masculino", "F": "Femenino"}
-            parts.append(f"Sexo: {sex_map.get(patient_context['sex'], patient_context['sex'])}")
+            basic.append(patient_context['sex'])
+        if basic:
+            parts.append(" ".join(basic))
 
         if patient_context.get("medical_history"):
-            parts.append(f"Antecedentes médicos: {patient_context['medical_history']}")
-
-        if patient_context.get("socio_cultural"):
-            parts.append(f"Contexto socio-cultural: {patient_context['socio_cultural']}")
+            parts.append(f"APP: {patient_context['medical_history']}")
 
         if patient_context.get("reason_for_visit"):
-            parts.append(f"Motivo de consulta: {patient_context['reason_for_visit']}")
+            parts.append(f"MC: {patient_context['reason_for_visit']}")
 
         if patient_context.get("clinical_text"):
-            parts.append(f"Descripción clínica: {patient_context['clinical_text']}")
+            parts.append(f"Anamnesis: {patient_context['clinical_text']}")
 
-        return "\n".join(parts) if parts else "Sin información disponible."
+        # CLAVE: Impresión clínica del médico
+        if patient_context.get("clinical_impression"):
+            parts.append(f"IMPRESIÓN DEL COLEGA: {patient_context['clinical_impression']}")
 
-    def _call_ollama(self, context_text: str) -> str:
-        """Llama a Ollama API."""
+        return "\n".join(parts) if parts else "Sin información."
+
+    def _has_sufficient_context(self, patient_context: dict) -> bool:
+        """Verifica si hay contexto suficiente para activar contraste."""
+        # Requiere: anamnesis + impresión clínica inicial
+        has_clinical_text = bool(patient_context.get("clinical_text", "").strip())
+        has_impression = bool(patient_context.get("clinical_impression", "").strip())
+        return has_clinical_text and has_impression
+
+    def _call_ollama(self, context_text: str) -> Tuple[str, dict]:
+        """Llama a Ollama API. Retorna (response, metrics)."""
         url = f"{self.base_url}/api/generate"
 
-        prompt = f"{PROMPT_CLINICAL}\n\n--- CASO ---\n{context_text}\n---\n\nJSON:"
+        prompt = f"{PROMPT_OBSERVER}\n\n---\n{context_text}\n---\n\nJSON:"
 
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
             "format": "json",
+            "options": {
+                "num_predict": 400,  # Límite ~400 tokens
+                "temperature": 0.3,  # Más determinista
+            }
         }
 
+        start_time = time.time()
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(url, json=payload)
             response.raise_for_status()
             data = response.json()
-            return data.get("response", "{}")
+
+        elapsed = time.time() - start_time
+        metrics = {
+            "response_time_ms": int(elapsed * 1000),
+            "eval_count": data.get("eval_count", 0),
+            "prompt_eval_count": data.get("prompt_eval_count", 0),
+        }
+
+        return data.get("response", "{}"), metrics
+
+    def _validate_response(self, response_text: str) -> Tuple[bool, str]:
+        """Valida que la respuesta no contenga patrones prohibidos."""
+        text_lower = response_text.lower()
+        for pattern in FORBIDDEN_PATTERNS:
+            if re.search(pattern, text_lower):
+                return False, f"Patrón prohibido: {pattern}"
+        return True, ""
 
     def _normalize_list(self, value) -> list:
         """Normaliza un valor a lista."""
@@ -316,47 +370,48 @@ class ObserverAgent:
             return [value] if value.strip() else []
         return [str(value)]
 
-    def _parse_clinical_response(self, response_text: str) -> dict:
-        """Parsea respuesta clínica jerarquizada."""
+    def _parse_observer_response(self, response_text: str) -> dict:
+        """Parsea respuesta del observador clínico."""
         try:
             result = json.loads(response_text)
-            scenarios = result.get("scenarios", {})
+
+            # Check if insufficient context
+            if result.get("insufficient"):
+                return {
+                    "insufficient": True,
+                    "missing": self._normalize_list(result.get("missing", [])),
+                    "visual_indicator": "gray",
+                }
 
             return {
-                "scenarios": {
-                    "critical": self._normalize_list(scenarios.get("critical", [])),
-                    "intermediate": self._normalize_list(scenarios.get("intermediate", [])),
-                    "manageable": self._normalize_list(scenarios.get("manageable", [])),
-                },
-                "alert_findings": self._normalize_list(result.get("alert_findings", [])),
-                "workup": self._normalize_list(result.get("workup", [])),
-                "clinical_keys": self._normalize_list(result.get("clinical_keys", [])),
-                "references": self._normalize_list(result.get("references", [])),
-                "data_gaps": self._normalize_list(result.get("data_gaps", [])),
-                "visual_indicator": self._determine_indicator_v2(scenarios),
+                "high_impact": self._normalize_list(result.get("high_impact", [])),
+                "alternatives": self._normalize_list(result.get("alternatives", [])),
+                "discriminators": self._normalize_list(result.get("discriminators", [])),
+                "management_paths": self._normalize_list(result.get("management_paths", [])),
+                "pivot_triggers": self._normalize_list(result.get("pivot_triggers", [])),
+                "visual_indicator": self._determine_observer_indicator(result),
             }
         except json.JSONDecodeError:
             return {
-                "scenarios": {"critical": [], "intermediate": [], "manageable": []},
-                "alert_findings": [],
-                "workup": [],
-                "clinical_keys": [],
-                "references": [],
-                "data_gaps": ["Respuesta no estructurada"],
+                "high_impact": [],
+                "alternatives": [],
+                "discriminators": [],
+                "management_paths": [],
+                "pivot_triggers": [],
                 "visual_indicator": "yellow",
                 "parse_error": response_text[:300] if response_text else "Sin respuesta",
             }
 
-    def _determine_indicator_v2(self, scenarios: dict) -> str:
-        """Determina indicador visual basado en escenarios clínicos."""
-        critical = scenarios.get("critical", [])
-        intermediate = scenarios.get("intermediate", [])
+    def _determine_observer_indicator(self, result: dict) -> str:
+        """Determina indicador visual basado en análisis del observador."""
+        high_impact = result.get("high_impact", [])
+        pivot_triggers = result.get("pivot_triggers", [])
 
-        if critical and len(critical) > 0:
-            return "red"
-        elif intermediate and len(intermediate) > 0:
-            return "yellow"
-        return "green"
+        if len(high_impact) > 0:
+            return "red"  # Rojo = escenarios de alto impacto a descartar
+        elif len(pivot_triggers) > 0:
+            return "yellow"  # Amarillo = hay triggers a vigilar
+        return "green"  # Verde = sin alertas críticas
 
     def get_cognitive_summary(self) -> Dict[str, Any]:
         """Obtiene resumen del comportamiento cognitivo."""
@@ -400,14 +455,16 @@ class ThrottledObserver:
             self._last_context_str = context_str
 
         return self._cached_result or {
-            "scenarios": {"critical": [], "intermediate": [], "manageable": []},
-            "alert_findings": [],
-            "workup": [],
-            "clinical_keys": [],
-            "references": [],
-            "data_gaps": [],
+            "insufficient": True,
+            "missing": ["Esperando contexto clínico"],
+            "high_impact": [],
+            "alternatives": [],
+            "discriminators": [],
+            "management_paths": [],
+            "pivot_triggers": [],
+            "metrics": {"response_time_ms": 0, "eval_count": 0},
             "visual_indicator": "gray",
-            "mode": "clinical",
+            "mode": "observer",
         }
 
     def get_cognitive_summary(self) -> Dict[str, Any]:

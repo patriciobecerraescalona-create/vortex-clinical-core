@@ -28,7 +28,7 @@ class LabPayload(BaseModel):
 
 
 class PatientContext(BaseModel):
-    """Contexto del paciente para el ObserverAgent."""
+    """Contexto del paciente para el contraste clínico."""
     patient_name: Optional[str] = None
     age: Optional[int] = None
     sex: Optional[str] = None
@@ -36,7 +36,8 @@ class PatientContext(BaseModel):
     socio_cultural: Optional[str] = None
     reason_for_visit: Optional[str] = None
     clinical_text: Optional[str] = None
-    clinical_phase: Optional[str] = "chief_complaint"  # FASE 1 por defecto
+    clinical_impression: Optional[str] = None  # Impresión inicial del médico
+    clinical_phase: Optional[str] = "anamnesis"
 
 
 class ObserverRequest(BaseModel):
@@ -358,166 +359,122 @@ def lab_ui():
       line-height: 1.6;
     }
 
-    /* Clinical Scenarios */
-    .scenario-list {
+    /* Observer - Insufficient */
+    .insufficient-section {
+      text-align: center;
+      padding: 24px 12px;
+    }
+    .insufficient-msg {
+      font-size: 12px;
+      color: #64748b;
+    }
+    .missing-list {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+
+    /* Observer Labels */
+    .label-red { color: #f87171 !important; }
+    .label-yellow { color: #fbbf24 !important; }
+    .label-green { color: #4ade80 !important; }
+    .label-orange { color: #fb923c !important; }
+
+    /* Item Lists */
+    .item-list {
       list-style: none;
       padding: 0;
       margin: 0;
     }
-    .scenario-list li {
-      padding: 8px 10px;
-      background: #0f172a;
-      border-radius: 4px;
-      margin-bottom: 6px;
+    .item-list li {
+      padding: 6px 0;
       font-size: 12px;
       color: #e5e7eb;
+      border-bottom: 1px solid #1e293b;
     }
-    .scenario-why {
+    .item-list li:last-child {
+      border-bottom: none;
+    }
+    .item-list li strong {
+      color: #f8fafc;
+    }
+    .rationale {
       display: block;
       font-size: 11px;
       color: #94a3b8;
       margin-top: 2px;
     }
-    .scenario-action {
+    .diff-info {
+      display: block;
       font-size: 11px;
       color: #67e8f9;
-      margin-top: 4px;
-      padding-left: 8px;
-      border-left: 2px solid #0891b2;
+      margin-top: 2px;
     }
 
-    /* Critical (red) */
-    .scenario-critical {
+    /* High Impact (red) */
+    .high-impact-section {
       background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .scenario-label-critical {
-      color: #f87171 !important;
-    }
-    .scenario-critical .scenario-list li {
       border-left: 3px solid #ef4444;
-    }
-
-    /* Intermediate (yellow) */
-    .scenario-intermediate {
-      background: rgba(234, 179, 8, 0.08);
-      border: 1px solid rgba(234, 179, 8, 0.25);
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .scenario-label-intermediate {
-      color: #fbbf24 !important;
-    }
-    .scenario-intermediate .scenario-list li {
-      border-left: 3px solid #eab308;
-    }
-
-    /* Manageable (green) */
-    .scenario-manageable {
-      background: rgba(34, 197, 94, 0.08);
-      border: 1px solid rgba(34, 197, 94, 0.25);
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .scenario-label-manageable {
-      color: #4ade80 !important;
-    }
-    .scenario-manageable .scenario-list li {
-      border-left: 3px solid #22c55e;
-    }
-
-    /* Alert Findings */
-    .alert-findings {
-      background: rgba(251, 146, 60, 0.1);
-      border: 1px solid rgba(251, 146, 60, 0.3);
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .alert-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .alert-list li {
-      padding: 6px 10px;
-      font-size: 12px;
-      color: #fdba74;
-      border-left: 2px solid #f97316;
-      margin-bottom: 4px;
-    }
-
-    /* Workup */
-    .workup-section {
-      background: #0f172a;
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .workup-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .workup-list li {
-      padding: 6px 10px;
-      font-size: 12px;
-      color: #e5e7eb;
-      border-left: 2px solid #3b82f6;
-      margin-bottom: 4px;
-    }
-
-    /* Clinical Keys */
-    .keys-section {
-      background: #0f172a;
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .clinical-keys {
-      font-size: 12px;
-      color: #a5b4fc;
-      line-height: 1.6;
-    }
-
-    /* References */
-    .refs-section {
-      background: transparent;
-      padding: 8px 0;
-    }
-    .clinical-refs {
-      font-size: 11px;
-      color: #64748b;
-      font-style: italic;
-    }
-
-    /* Data Gaps */
-    .gaps-section {
-      background: rgba(239, 68, 68, 0.05);
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .data-gaps {
-      font-size: 12px;
-      color: #fca5a5;
-    }
-
-    /* Cognitive Section */
-    .cognitive-section {
-      background: #1e1b4b;
-      border: 1px solid #4338ca;
       border-radius: 4px;
-      padding: 8px;
+      padding: 8px 10px;
     }
-    .cognitive-metrics {
+
+    /* Alternatives (yellow) */
+    .alternatives-section {
+      background: rgba(234, 179, 8, 0.08);
+      border-left: 3px solid #eab308;
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+
+    /* Discriminators */
+    .discriminators-section {
+      background: #0f172a;
+      border-left: 3px solid #3b82f6;
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+    .disc-list li {
+      border-bottom: none;
+      padding: 4px 0;
+    }
+
+    /* Management (green) */
+    .management-section {
+      background: rgba(34, 197, 94, 0.08);
+      border-left: 3px solid #22c55e;
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+
+    /* Triggers (orange) */
+    .triggers-section {
+      background: rgba(251, 146, 60, 0.1);
+      border-left: 3px solid #f97316;
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+    .trigger-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .trigger-list li {
+      padding: 4px 0;
+      font-size: 11px;
+      color: #fdba74;
+    }
+
+    /* Metrics Bar */
+    .metrics-bar {
       display: flex;
-      gap: 8px;
-    }
-    .metric {
+      justify-content: space-between;
+      padding: 6px 8px;
+      background: #0a0f1a;
+      border-radius: 4px;
       font-size: 10px;
-      padding: 2px 6px;
-      background: rgba(99, 102, 241, 0.2);
-      color: #a5b4fc;
-      border-radius: 3px;
+      color: #64748b;
+      margin-top: 8px;
     }
 
     /* Hidden */
@@ -595,9 +552,17 @@ def lab_ui():
 
     <!-- Clinical Text -->
     <div class="section">
-      <div class="section-title">Texto Clínico</div>
+      <div class="section-title">Anamnesis</div>
       <div class="form-group full-width">
-        <textarea id="clinicalText" rows="5" placeholder="Descripción clínica del paciente...">Paciente indica dolor de estómago con vómitos reiterados de 3 días.</textarea>
+        <textarea id="clinicalText" rows="4" placeholder="Descripción clínica...">Paciente indica dolor de estómago con vómitos reiterados de 3 días.</textarea>
+      </div>
+    </div>
+
+    <!-- Initial Impression -->
+    <div class="section" style="background: #1e1b4b; border: 1px solid #4338ca;">
+      <div class="section-title" style="color: #a5b4fc;">Impresión Clínica Inicial</div>
+      <div class="form-group full-width">
+        <textarea id="clinicalImpression" rows="2" placeholder="Tu hipótesis inicial... (activa el contraste)" style="background: #0f0d24; border-color: #4338ca;"></textarea>
       </div>
     </div>
 
@@ -624,8 +589,8 @@ def lab_ui():
     <div class="observer-panel">
       <div class="observer-header">
         <div id="semaforo" class="semaforo"></div>
-        <span class="observer-title">Observer Agent</span>
-        <span id="phaseLabel" class="observer-phase">Fase 1</span>
+        <span class="observer-title">Contraste Clínico</span>
+        <span id="phaseLabel" class="observer-phase">—</span>
       </div>
       <div id="observerStatus" class="observer-status">
         <span style="color:#64748b;">●</span> <span>Iniciando...</span>
@@ -682,7 +647,8 @@ function getPatientContext() {
     socio_cultural: document.getElementById('socioCultural').value || null,
     reason_for_visit: document.getElementById('reasonForVisit').value || null,
     clinical_text: document.getElementById('clinicalText').value || null,
-    clinical_phase: document.getElementById('clinicalPhase').value || 'chief_complaint'
+    clinical_impression: document.getElementById('clinicalImpression').value || null,
+    clinical_phase: document.getElementById('clinicalPhase').value || 'anamnesis'
   };
 }
 
@@ -749,8 +715,9 @@ function updateObserverUI(analysis) {
 
   const llmStatus = analysis.llm_status || 'connected';
   const isDisconnected = llmStatus !== 'connected';
+  const metrics = analysis.metrics || {};
 
-  // Semaforo por escenarios
+  // Semaforo
   semaforo.className = 'semaforo';
   if (isDisconnected || analysis.visual_indicator === 'gray') {
     semaforo.classList.add('gray');
@@ -760,178 +727,115 @@ function updateObserverUI(analysis) {
     semaforo.classList.add('red');
   }
 
-  // Badge
+  // Badge OBSERVER
   if (isDisconnected) {
-    phaseLabel.textContent = 'LLM: OFF';
+    phaseLabel.textContent = 'OFF';
     phaseLabel.style.background = '#7f1d1d';
     phaseLabel.style.color = '#fca5a5';
+  } else if (analysis.insufficient) {
+    phaseLabel.textContent = 'ESPERA';
+    phaseLabel.style.background = '#334155';
+    phaseLabel.style.color = '#94a3b8';
   } else {
-    phaseLabel.textContent = 'CLINICAL';
-    phaseLabel.style.background = '#0f766e';
-    phaseLabel.style.color = '#99f6e4';
+    const ms = metrics.response_time_ms || 0;
+    phaseLabel.textContent = ms > 0 ? `${(ms/1000).toFixed(1)}s` : 'OK';
+    phaseLabel.style.background = ms > 4000 ? '#7f1d1d' : '#14532d';
+    phaseLabel.style.color = ms > 4000 ? '#fca5a5' : '#86efac';
   }
 
   let html = '';
 
   // Error state
   if (isDisconnected) {
+    html = `<div class="observer-section"><div style="color:#f87171;font-size:12px;">${escapeHtml(analysis.llm_error || 'LLM no disponible')}</div></div>`;
+    content.innerHTML = html;
+    return;
+  }
+
+  // Insufficient context
+  if (analysis.insufficient) {
+    const missing = Array.isArray(analysis.missing) ? analysis.missing : [];
     html = `
-      <div class="observer-section">
-        <div class="observer-label">Estado</div>
-        <div class="observer-summary" style="color: #f87171;">
-          ${escapeHtml(analysis.llm_error || 'LLM no disponible')}
-        </div>
-      </div>
-      <div class="observer-empty" style="margin-top: 16px;">
-        <code style="background:#1e293b;padding:4px 8px;border-radius:4px;">ollama serve</code>
+      <div class="observer-section insufficient-section">
+        <div class="insufficient-msg">Completa anamnesis + impresión clínica</div>
+        ${missing.length > 0 ? `<div class="missing-list">Falta: ${missing.join(', ')}</div>` : ''}
       </div>
     `;
     content.innerHTML = html;
     return;
   }
 
-  const scenarios = analysis.scenarios || {};
-
-  // CRÍTICO (rojo)
-  const critical = Array.isArray(scenarios.critical) ? scenarios.critical : [];
-  if (critical.length > 0) {
+  // 1. ALTO IMPACTO (rojo)
+  const highImpact = Array.isArray(analysis.high_impact) ? analysis.high_impact : [];
+  if (highImpact.length > 0) {
     html += `
-      <div class="observer-section scenario-critical">
-        <div class="observer-label scenario-label-critical">Escenarios Críticos</div>
-        <ul class="scenario-list">
-          ${critical.map(s => {
-            if (typeof s === 'object') {
-              return `<li>
-                <strong>${escapeHtml(s.condition || '')}</strong>
-                ${s.why ? `<span class="scenario-why">${escapeHtml(s.why)}</span>` : ''}
-                ${s.action ? `<div class="scenario-action">${escapeHtml(s.action)}</div>` : ''}
-              </li>`;
-            }
-            return `<li>${escapeHtml(String(s))}</li>`;
-          }).join('')}
+      <div class="observer-section high-impact-section">
+        <div class="observer-label label-red">A Descartar (Alto Impacto)</div>
+        <ul class="item-list">
+          ${highImpact.map(h => `<li><strong>${escapeHtml(h.scenario || h)}</strong>${h.rationale ? `<span class="rationale">${escapeHtml(h.rationale)}</span>` : ''}</li>`).join('')}
         </ul>
       </div>
     `;
   }
 
-  // INTERMEDIO (amarillo)
-  const intermediate = Array.isArray(scenarios.intermediate) ? scenarios.intermediate : [];
-  if (intermediate.length > 0) {
+  // 2. ALTERNATIVAS
+  const alts = Array.isArray(analysis.alternatives) ? analysis.alternatives : [];
+  if (alts.length > 0) {
     html += `
-      <div class="observer-section scenario-intermediate">
-        <div class="observer-label scenario-label-intermediate">Escenarios Intermedios</div>
-        <ul class="scenario-list">
-          ${intermediate.map(s => {
-            if (typeof s === 'object') {
-              return `<li>
-                <strong>${escapeHtml(s.condition || '')}</strong>
-                ${s.why ? `<span class="scenario-why">${escapeHtml(s.why)}</span>` : ''}
-                ${s.action ? `<div class="scenario-action">${escapeHtml(s.action)}</div>` : ''}
-              </li>`;
-            }
-            return `<li>${escapeHtml(String(s))}</li>`;
-          }).join('')}
+      <div class="observer-section alternatives-section">
+        <div class="observer-label label-yellow">Alternativas</div>
+        <ul class="item-list">
+          ${alts.map(a => `<li><strong>${escapeHtml(a.scenario || a)}</strong>${a.rationale ? `<span class="rationale">${escapeHtml(a.rationale)}</span>` : ''}</li>`).join('')}
         </ul>
       </div>
     `;
   }
 
-  // MANEJABLE (verde)
-  const manageable = Array.isArray(scenarios.manageable) ? scenarios.manageable : [];
-  if (manageable.length > 0) {
+  // 3. DISCRIMINADORES
+  const discs = Array.isArray(analysis.discriminators) ? analysis.discriminators : [];
+  if (discs.length > 0) {
     html += `
-      <div class="observer-section scenario-manageable">
-        <div class="observer-label scenario-label-manageable">Escenarios Manejables</div>
-        <ul class="scenario-list">
-          ${manageable.map(s => {
-            if (typeof s === 'object') {
-              return `<li>
-                <strong>${escapeHtml(s.condition || '')}</strong>
-                ${s.why ? `<span class="scenario-why">${escapeHtml(s.why)}</span>` : ''}
-                ${s.action ? `<div class="scenario-action">${escapeHtml(s.action)}</div>` : ''}
-              </li>`;
-            }
-            return `<li>${escapeHtml(String(s))}</li>`;
-          }).join('')}
+      <div class="observer-section discriminators-section">
+        <div class="observer-label">Estudios Diferenciadores</div>
+        <ul class="item-list disc-list">
+          ${discs.map(d => `<li><strong>${escapeHtml(d.test || d)}</strong>${d.differentiates ? `<span class="diff-info">→ ${escapeHtml(d.differentiates)}</span>` : ''}</li>`).join('')}
         </ul>
       </div>
     `;
   }
 
-  // Hallazgos de alerta
-  const alerts = Array.isArray(analysis.alert_findings) ? analysis.alert_findings : [];
-  if (alerts.length > 0) {
+  // 4. MANEJO
+  const paths = Array.isArray(analysis.management_paths) ? analysis.management_paths : [];
+  if (paths.length > 0) {
     html += `
-      <div class="observer-section alert-findings">
-        <div class="observer-label">Hallazgos de Alerta</div>
-        <ul class="alert-list">
-          ${alerts.map(a => `<li>${escapeHtml(String(a))}</li>`).join('')}
+      <div class="observer-section management-section">
+        <div class="observer-label label-green">Escenarios de Manejo</div>
+        <ul class="item-list">
+          ${paths.map(p => `<li><strong>${escapeHtml(p.path || p)}</strong>${p.when ? `<span class="rationale">${escapeHtml(p.when)}</span>` : ''}</li>`).join('')}
         </ul>
       </div>
     `;
   }
 
-  // Orientación diagnóstica (workup)
-  const workup = Array.isArray(analysis.workup) ? analysis.workup : [];
-  if (workup.length > 0) {
+  // 5. TRIGGERS
+  const triggers = Array.isArray(analysis.pivot_triggers) ? analysis.pivot_triggers : [];
+  if (triggers.length > 0) {
     html += `
-      <div class="observer-section workup-section">
-        <div class="observer-label">Orientación Diagnóstica</div>
-        <ul class="workup-list">
-          ${workup.map(w => {
-            if (typeof w === 'object' && w.study) {
-              return `<li><strong>${escapeHtml(w.study)}</strong>${w.target ? ` → ${escapeHtml(w.target)}` : ''}</li>`;
-            }
-            return `<li>${escapeHtml(String(w))}</li>`;
-          }).join('')}
+      <div class="observer-section triggers-section">
+        <div class="observer-label label-orange">Cambian Conducta</div>
+        <ul class="trigger-list">
+          ${triggers.map(t => `<li>${escapeHtml(String(t))}</li>`).join('')}
         </ul>
       </div>
     `;
   }
 
-  // Claves clínicas
-  const keys = Array.isArray(analysis.clinical_keys) ? analysis.clinical_keys : [];
-  if (keys.length > 0) {
+  // Métricas (footer)
+  if (metrics.response_time_ms > 0) {
     html += `
-      <div class="observer-section keys-section">
-        <div class="observer-label">Claves Clínicas</div>
-        <div class="clinical-keys">${keys.map(k => escapeHtml(String(k))).join(' · ')}</div>
-      </div>
-    `;
-  }
-
-  // Referencias
-  const refs = Array.isArray(analysis.references) ? analysis.references : [];
-  if (refs.length > 0) {
-    html += `
-      <div class="observer-section refs-section">
-        <div class="observer-label">Referencias</div>
-        <div class="clinical-refs">${refs.map(r => escapeHtml(String(r))).join(' · ')}</div>
-      </div>
-    `;
-  }
-
-  // Datos faltantes
-  const gaps = Array.isArray(analysis.data_gaps) ? analysis.data_gaps : [];
-  if (gaps.length > 0) {
-    html += `
-      <div class="observer-section gaps-section">
-        <div class="observer-label">Datos Críticos Faltantes</div>
-        <div class="data-gaps">${gaps.map(g => escapeHtml(String(g))).join(' · ')}</div>
-      </div>
-    `;
-  }
-
-  // Cognitive Behavior (research)
-  if (analysis.cognitive_behavior && Object.keys(analysis.cognitive_behavior).length > 0) {
-    const cb = analysis.cognitive_behavior;
-    html += `
-      <div class="observer-section cognitive-section">
-        <div class="observer-label">Cognitivo</div>
-        <div class="cognitive-metrics">
-          <span class="metric">U:${cb.uncertainty_markers?.length || 0}</span>
-          <span class="metric">F:${cb.fabrication_markers?.length || 0}</span>
-        </div>
+      <div class="metrics-bar">
+        <span>${metrics.response_time_ms}ms</span>
+        <span>${metrics.eval_count || 0} tok</span>
       </div>
     `;
   }
@@ -1028,7 +932,8 @@ function stopPolling() {
 // =============================
 const fields = [
   'patientName', 'patientAge', 'patientSex', 'clinicalPhase',
-  'reasonForVisit', 'medicalHistory', 'socioCultural', 'clinicalText'
+  'reasonForVisit', 'medicalHistory', 'socioCultural', 'clinicalText',
+  'clinicalImpression'
 ];
 
 // Los cambios manuales disparan análisis inmediato (con debounce)
