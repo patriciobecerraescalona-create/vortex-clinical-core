@@ -41,6 +41,10 @@ def on_startup():
     from backend.agents.observer_agent import warmup_ollama
     threading.Thread(target=warmup_ollama, daemon=True).start()
 
+    # Iniciar Supervisor de Tasks (12s loop)
+    from backend.app.routes.lab import start_supervisor
+    start_supervisor()
+
 # =========================
 # ROUTERS
 # =========================

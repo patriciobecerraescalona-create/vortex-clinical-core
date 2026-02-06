@@ -16,3 +16,17 @@ _pycache_/
 .env.*
 # Claude Code local settings
 .claude/
+# --- Local / debug ---
+*.db
+diff_*.txt
+verify_*.py
+nul
+
+# --- Python cache ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Env ---
+.env
+.env.*

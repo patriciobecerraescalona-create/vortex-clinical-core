@@ -21,39 +21,52 @@ from typing import Dict, Any, Optional, List, Tuple
 # =========================
 OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://192.168.1.8:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
-OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "30.0"))  # 30s max, objetivo <4s
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "60.0"))  # 60s LAB, objetivo <4s
+
+
+def safe_str(value) -> str:
+    """Convierte cualquier valor a string seguro (nunca None)."""
+    if value is None:
+        return ""
+    return str(value).strip()
 
 # =========================
 # PROMPT OBSERVADOR CLÍNICO DEFINITIVO
 # =========================
-PROMPT_OBSERVER = """NUNCA repitas información del contexto. El médico ya la conoce.
-Tu rol comienza donde termina la anamnesis.
+PROMPT_OBSERVER = """Nunca resumas ni repitas información clínica ya presente en el contexto.
+Asume que el médico ya comprende completamente el caso.
+Tu rol comienza después de finalizada la anamnesis y el examen físico.
+Si no puedes aportar información clínica adicional relevante, responde:
+{"no_additional": true}
 
-Eres OBSERVADOR DE CONTRASTE clínico senior.
-NO resumes. NO confirmas obviedades. NO prescribes.
+Eres OBSERVADOR DE CONTRASTE CLÍNICO senior.
+No realizas anamnesis, no resumes casos, no confirmas lo evidente.
+Tu función es ampliar el razonamiento del médico tratante y reducir sesgos.
 
-PROHIBIDO usar frases como:
-- "Paciente con..."
-- "Se observa..."
-- "Cuadro compatible con..."
-- "Según la anamnesis..."
+PROHIBIDO:
+- Resumir el caso
+- Repetir información explícita del contexto
+- Validar lo obvio ("cuadro gastrointestinal", "dolor abdominal")
+- Prescribir tratamientos
+- Emitir diagnósticos definitivos
+- Usar frases como "Paciente con...", "Se observa...", "Cuadro compatible..."
 
-ESTRUCTURA EXACTA (JSON):
+ESTRUCTURA JSON:
 {
-  "high_impact": [{"scenario": "dx", "rationale": "por qué considerar"}],
+  "high_impact": [{"scenario": "dx", "rationale": "justificación breve"}],
   "alternatives": [{"scenario": "dx", "rationale": "si evolución atípica"}],
-  "discriminators": [{"test": "estudio", "differentiates": "qué distingue"}],
-  "management_paths": [{"path": "conducta", "when": "en qué escenario"}],
+  "discriminators": [{"test": "estudio", "differentiates": "qué información aporta"}],
+  "management_paths": [{"path": "conducta general", "when": "en qué escenario"}],
   "pivot_triggers": ["hallazgo que obliga a re-priorizar"]
 }
 
 REGLAS:
 - Máximo 5 items por categoría
-- Frases de máximo 15 palabras
-- Solo información NO OBVIA
-- Lenguaje de pase de guardia
+- Frases breves, nivel médico senior
+- Solo información NO OBVIA que amplíe el razonamiento
+- Prioriza síntesis y jerarquía, no volumen
 
-Si contexto insuficiente: {"insufficient": true, "missing": ["qué falta"]}"""
+Objetivo: Que el médico piense "Esto no lo había considerado y es clínicamente relevante"."""
 
 # Patrones prohibidos en respuesta (redundancia)
 FORBIDDEN_PATTERNS = [
@@ -204,15 +217,17 @@ class ObserverAgent:
     def analyze(self, patient_context: dict) -> dict:
         """
         Contraste clínico: amplía el razonamiento del médico.
-        Solo se activa con contexto suficiente (anamnesis + impresión).
+        Solo se activa con contexto suficiente (anamnesis).
         """
+        # Sanitizar entrada
+        if not patient_context or not isinstance(patient_context, dict):
+            patient_context = {}
+
         # Verificar contexto suficiente
         if not self._has_sufficient_context(patient_context):
             missing = []
-            if not patient_context.get("clinical_text", "").strip():
+            if not safe_str(patient_context.get("clinical_text")):
                 missing.append("Anamnesis")
-            if not patient_context.get("clinical_impression", "").strip():
-                missing.append("Impresión clínica inicial")
             return {
                 "insufficient": True,
                 "missing": missing,
@@ -250,18 +265,20 @@ class ObserverAgent:
             )
             result["cognitive_behavior"] = cognitive_analysis
             result["metrics"] = metrics
-            result["llm_status"] = "connected"
+            # llm_status ya viene del parser - solo asegurar que existe
+            if "llm_status" not in result:
+                result["llm_status"] = "ok"
             result["mode"] = "observer"
 
         except httpx.ConnectError:
             result = self._error_response(
-                "disconnected",
-                f"No se pudo conectar a Ollama en {self.base_url}"
+                "error",
+                f"Sin conexión a Ollama ({self.base_url})"
             )
         except httpx.TimeoutException:
             result = self._error_response(
-                "timeout",
-                "El modelo tardó demasiado en responder."
+                "error",
+                "Timeout del modelo"
             )
         except Exception as e:
             result = self._error_response("error", str(e))
@@ -287,38 +304,41 @@ class ObserverAgent:
 
     def _format_context(self, patient_context: dict) -> str:
         """Formatea el contexto del paciente para contraste."""
+        if not patient_context:
+            return "Sin información."
+
         parts = []
 
         # Datos básicos (compacto)
         basic = []
-        if patient_context.get("age"):
-            basic.append(f"{patient_context['age']}a")
-        if patient_context.get("sex"):
-            basic.append(patient_context['sex'])
+        age = patient_context.get("age")
+        sex = safe_str(patient_context.get("sex"))
+        if age:
+            basic.append(f"{age}a")
+        if sex:
+            basic.append(sex)
         if basic:
             parts.append(" ".join(basic))
 
-        if patient_context.get("medical_history"):
-            parts.append(f"APP: {patient_context['medical_history']}")
+        history = safe_str(patient_context.get("medical_history"))
+        if history:
+            parts.append(f"APP: {history}")
 
-        if patient_context.get("reason_for_visit"):
-            parts.append(f"MC: {patient_context['reason_for_visit']}")
+        reason = safe_str(patient_context.get("reason_for_visit"))
+        if reason:
+            parts.append(f"MC: {reason}")
 
-        if patient_context.get("clinical_text"):
-            parts.append(f"Anamnesis: {patient_context['clinical_text']}")
-
-        # CLAVE: Impresión clínica del médico
-        if patient_context.get("clinical_impression"):
-            parts.append(f"IMPRESIÓN DEL COLEGA: {patient_context['clinical_impression']}")
+        clinical = safe_str(patient_context.get("clinical_text"))
+        if clinical:
+            parts.append(f"Anamnesis: {clinical}")
 
         return "\n".join(parts) if parts else "Sin información."
 
     def _has_sufficient_context(self, patient_context: dict) -> bool:
         """Verifica si hay contexto suficiente para activar contraste."""
-        # Requiere: anamnesis + impresión clínica inicial
-        has_clinical_text = bool(patient_context.get("clinical_text", "").strip())
-        has_impression = bool(patient_context.get("clinical_impression", "").strip())
-        return has_clinical_text and has_impression
+        # Requiere: solo anamnesis
+        has_clinical_text = bool(safe_str(patient_context.get("clinical_text")))
+        return has_clinical_text
 
     def _call_ollama(self, context_text: str) -> Tuple[str, dict]:
         """Llama a Ollama API. Retorna (response, metrics)."""
@@ -348,6 +368,7 @@ class ObserverAgent:
             "response_time_ms": int(elapsed * 1000),
             "eval_count": data.get("eval_count", 0),
             "prompt_eval_count": data.get("prompt_eval_count", 0),
+            "model_name": self.model,
         }
 
         return data.get("response", "{}"), metrics
@@ -361,34 +382,55 @@ class ObserverAgent:
         return True, ""
 
     def _normalize_list(self, value) -> list:
-        """Normaliza un valor a lista."""
+        """Normaliza un valor a lista (seguro para None)."""
         if value is None:
             return []
         if isinstance(value, list):
-            return value
+            # Filtrar None de la lista
+            return [v for v in value if v is not None]
         if isinstance(value, str):
             return [value] if value.strip() else []
-        return [str(value)]
+        return [str(value)] if value else []
 
     def _parse_observer_response(self, response_text: str) -> dict:
         """Parsea respuesta del observador clínico."""
         try:
             result = json.loads(response_text)
 
-            # Check if insufficient context
+            # Sin aporte adicional del LLM
+            if result.get("no_additional"):
+                return {
+                    "no_additional": True,
+                    "llm_status": "ok",  # LLM respondió, pero sin aporte
+                    "visual_indicator": "green",
+                }
+
+            # Check if insufficient context (respuesta del LLM)
             if result.get("insufficient"):
                 return {
                     "insufficient": True,
                     "missing": self._normalize_list(result.get("missing", [])),
+                    "llm_status": "ok",  # LLM respondió
                     "visual_indicator": "gray",
                 }
 
+            # Respuesta con contenido clínico
+            high_impact = self._normalize_list(result.get("high_impact", []))
+            alternatives = self._normalize_list(result.get("alternatives", []))
+            discriminators = self._normalize_list(result.get("discriminators", []))
+            management_paths = self._normalize_list(result.get("management_paths", []))
+            pivot_triggers = self._normalize_list(result.get("pivot_triggers", []))
+
+            # Determinar si hay contenido útil
+            has_content = any([high_impact, alternatives, discriminators, management_paths, pivot_triggers])
+
             return {
-                "high_impact": self._normalize_list(result.get("high_impact", [])),
-                "alternatives": self._normalize_list(result.get("alternatives", [])),
-                "discriminators": self._normalize_list(result.get("discriminators", [])),
-                "management_paths": self._normalize_list(result.get("management_paths", [])),
-                "pivot_triggers": self._normalize_list(result.get("pivot_triggers", [])),
+                "high_impact": high_impact,
+                "alternatives": alternatives,
+                "discriminators": discriminators,
+                "management_paths": management_paths,
+                "pivot_triggers": pivot_triggers,
+                "llm_status": "ok" if has_content else "ok",  # LLM respondió
                 "visual_indicator": self._determine_observer_indicator(result),
             }
         except json.JSONDecodeError:
@@ -398,6 +440,7 @@ class ObserverAgent:
                 "discriminators": [],
                 "management_paths": [],
                 "pivot_triggers": [],
+                "llm_status": "error",  # LLM falló, no hay texto útil
                 "visual_indicator": "yellow",
                 "parse_error": response_text[:300] if response_text else "Sin respuesta",
             }
@@ -476,6 +519,7 @@ class ThrottledObserver:
 # INSTANCIA GLOBAL
 # =========================
 _default_observer: Optional[ThrottledObserver] = None
+_warmup_done: bool = False
 
 
 def get_observer() -> ThrottledObserver:
@@ -484,3 +528,39 @@ def get_observer() -> ThrottledObserver:
     if _default_observer is None:
         _default_observer = ThrottledObserver()
     return _default_observer
+
+
+def warmup_ollama() -> dict:
+    """
+    Calienta el modelo Ollama con una consulta simple.
+    Llamar al iniciar el backend para reducir latencia del primer request real.
+    """
+    global _warmup_done
+    if _warmup_done:
+        return {"status": "already_warm"}
+
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": "Responde OK",
+        "stream": False,
+        "options": {"num_predict": 5}
+    }
+
+    try:
+        start = time.time()
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(url, json=payload)
+            response.raise_for_status()
+        elapsed = time.time() - start
+        _warmup_done = True
+        print(f"[WARMUP] Ollama {OLLAMA_MODEL} listo en {elapsed:.1f}s")
+        return {"status": "ok", "time_s": round(elapsed, 1)}
+    except Exception as e:
+        print(f"[WARMUP] Error: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+def get_warmup_status() -> bool:
+    """Retorna si el warmup de Ollama ha finalizado."""
+    return _warmup_done

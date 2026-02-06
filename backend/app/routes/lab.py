@@ -11,7 +11,8 @@ from backend.app.routes.procedures import handle_voice_event
 from backend.app.services.agent_context import get_user_context
 
 # ObserverAgent para análisis pasivo
-from backend.agents.observer_agent import get_observer
+from backend.agents.observer_agent import get_observer, get_warmup_status
+from backend.app.services.llm_agent import run_llm
 
 router = APIRouter()
 
@@ -36,7 +37,6 @@ class PatientContext(BaseModel):
     socio_cultural: Optional[str] = None
     reason_for_visit: Optional[str] = None
     clinical_text: Optional[str] = None
-    clinical_impression: Optional[str] = None  # Impresión inicial del médico
     clinical_phase: Optional[str] = "anamnesis"
 
 
@@ -44,6 +44,14 @@ class ObserverRequest(BaseModel):
     """Request para el endpoint del observer."""
     patient_context: PatientContext
     force: bool = False  # Forzar análisis ignorando throttling
+
+
+class AgentRequest(BaseModel):
+    """Request para el endpoint del agente activo."""
+    user_text: str
+    role: str = "clinical"
+    patient_context: dict = {}
+    options: Optional[dict] = None
 
 
 # =========================
@@ -558,26 +566,64 @@ def lab_ui():
       </div>
     </div>
 
-    <!-- Initial Impression -->
-    <div class="section" style="background: #1e1b4b; border: 1px solid #4338ca;">
-      <div class="section-title" style="color: #a5b4fc;">Impresión Clínica Inicial</div>
-      <div class="form-group full-width">
-        <textarea id="clinicalImpression" rows="2" placeholder="Tu hipótesis inicial... (activa el contraste)" style="background: #0f0d24; border-color: #4338ca;"></textarea>
-      </div>
     </div>
 
-  </div>
+
 
   <!-- =====================
        VORTEX MODE (Placeholder)
        ===================== -->
   <div id="vortexMode" class="lab-main hidden">
-    <div class="placeholder-mode">
-      <div class="placeholder-icon">⚡</div>
-      <div class="placeholder-text">
-        <strong>Agentes Vortex</strong><br><br>
-        Este modo permitirá interactuar con los agentes activos del sistema cognitivo.<br><br>
-        <em>Próximamente disponible.</em>
+    <!-- Input Section -->
+    <div class="section">
+      <div class="section-title">Agente Activo (Vortex Core)</div>
+      
+      <!-- Role and Connection Status Bar -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <!-- Role Selector -->
+        <div class="form-group" style="flex:1; max-width:200px; margin:0;">
+          <select id="agentRole" style="padding:6px; font-size:12px; height:32px;">
+             <option value="clinical" selected>🏥 Clínico (Experto)</option>
+             <option value="administrative">📋 Administrativo</option>
+             <option value="commercial">💼 Comercial</option>
+             <option value="personal">🧘 Asistente Personal</option>
+             <option value="support">🛠️ Soporte Técnico</option>
+          </select>
+        </div>
+        
+        <!-- Connection Status -->
+        <div id="connectionStatus" style="font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:6px;">
+           <div class="spinner" style="width:10px; height:10px; border-width:1px;"></div>
+           Conectando al motor...
+        </div>
+      </div>
+
+      <div class="form-group full-width">
+        <textarea id="agentInput" rows="4" placeholder="Escribe tu consulta al agente...">Paciente de 45 años con dolor abdominal...</textarea>
+      </div>
+      <div class="form-actions right">
+        <button id="btnSendAgent" class="lab-btn primary" onclick="callAgent()">
+          Enviar Consulta
+        </button>
+      </div>
+    </div>
+
+    <!-- Agent Output Section -->
+    <div class="section">
+      <div class="section-title">Respuesta Cognitiva</div>
+      <div id="agentStatus" class="agent-status" style="display:none; color:#64748b; margin-bottom:10px;">
+        <span class="spinner">●</span> Procesando...
+      </div>
+      <div id="agentOutput" class="agent-output" style="
+          min-height: 100px;
+          padding: 15px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          font-family: monospace;
+          white-space: pre-wrap;
+          color: #334155;">
+        Esperando input...
       </div>
     </div>
   </div>
@@ -637,18 +683,19 @@ let lastAnalysis = null;
 let lastUpdateTime = null;
 let pollingInterval = null;
 let currentController = null;  // AbortController activo
+let countdownTimer = null;
+let slowResponseTimer = null;
 const POLL_INTERVAL_MS = 15000;  // 15 segundos (más espacio para análisis largo)
 
 function getPatientContext() {
   return {
-    patient_name: document.getElementById('patientName').value || null,
-    age: parseInt(document.getElementById('patientAge').value) || null,
-    sex: document.getElementById('patientSex').value || null,
-    medical_history: document.getElementById('medicalHistory').value || null,
-    socio_cultural: document.getElementById('socioCultural').value || null,
-    reason_for_visit: document.getElementById('reasonForVisit').value || null,
-    clinical_text: document.getElementById('clinicalText').value || null,
-    clinical_impression: document.getElementById('clinicalImpression').value || null,
+    patient_name: document.getElementById('patientName').value || '',
+    patient_age: parseInt(document.getElementById('patientAge').value) || 0,
+    patient_sex: document.getElementById('patientSex').value || '',
+    medical_history: document.getElementById('medicalHistory').value || '',
+    socio_cultural: document.getElementById('socioCultural').value || '',
+    reason_for_visit: document.getElementById('reasonForVisit').value || '',
+    clinical_text: document.getElementById('clinicalText').value || '',
     clinical_phase: document.getElementById('clinicalPhase').value || 'anamnesis'
   };
 }
@@ -690,7 +737,7 @@ function showStatus(status, message) {
 }
 
 function showLoading(isUpdate = false) {
-  const msg = isUpdate ? 'Actualizando...' : 'Analizando razonamiento clínico profundo...';
+  const msg = 'Analizando razonamiento clínico profundo...';
   showStatus(isUpdate ? 'updating' : 'analyzing', msg);
 
   if (!lastAnalysis) {
@@ -745,7 +792,9 @@ function updateObserverUI(analysis) {
     phaseLabel.style.color = '#86efac';
   } else {
     const ms = metrics.response_time_ms || 0;
-    phaseLabel.textContent = ms > 0 ? `${(ms/1000).toFixed(1)}s` : 'OK';
+    const model = metrics.model_name || 'ollama';
+    const tokens = metrics.eval_count || 0;
+    phaseLabel.textContent = `${model} · ${(ms/1000).toFixed(1)}s · ${tokens} tokens`;
     phaseLabel.style.background = ms > 4000 ? '#92400e' : '#14532d';
     phaseLabel.style.color = ms > 4000 ? '#fde047' : '#86efac';
   }
@@ -764,7 +813,7 @@ function updateObserverUI(analysis) {
     const missing = Array.isArray(analysis.missing) ? analysis.missing : [];
     html = `
       <div class="observer-section insufficient-section">
-        <div class="insufficient-msg">Completa anamnesis + impresión clínica</div>
+        <div class="insufficient-msg">Completa anamnesis</div>
         ${missing.length > 0 ? `<div class="missing-list">Falta: ${missing.join(', ')}</div>` : ''}
       </div>
     `;
@@ -865,6 +914,60 @@ function updateObserverUI(analysis) {
   content.innerHTML = html;
 }
 
+async function pollObserverStatus(taskId) {
+  try {
+    const res = await fetch(`/lab/observer/${taskId}`);
+    if (!res.ok) {
+        showStatus('error', `Error polling task: ${res.status}`);
+        observerLoading = false;
+        return;
+    }
+    
+    const data = await res.json();
+    
+    if (data.status === 'processing') {
+      // Sigue procesando, volver a consultar en 1s
+      setTimeout(() => pollObserverStatus(taskId), 1000);
+      return;
+    }
+    
+    // Task completada (status 'ok')
+    if (data.status === 'ok') {
+      observerLoading = false; // RELEASE LOCK
+      
+      // Verificar status interno del análisis
+      if (data.task_status === 'error') {
+         // Error de ejecución del LLM
+         const err = data.analysis.llm_error || 'Error desconocido';
+         showStatus('error', err);
+         updateObserverUI(data.analysis); // Mostrar error visual
+      } else {
+         // Éxito
+         lastAnalysis = data.analysis;
+         lastContextHash = hashContext(getPatientContext()); // Update hash
+         lastUpdateTime = new Date();
+         updateObserverUI(data.analysis);
+
+         const llmStatus = data.analysis.llm_status || 'connected';
+         if (llmStatus === 'connected' || llmStatus === 'ok') {
+            showStatus('updated', `Actualizado · ${formatTime(lastUpdateTime)}`);
+         } else if (llmStatus === 'waiting') {
+            showStatus('idle', 'Esperando contexto');
+         } else {
+            showStatus('idle', 'LLM no disponible');
+         }
+      }
+    } else {
+      showStatus('error', 'Respuesta inesperada del servidor');
+      observerLoading = false; // RELEASE LOCK
+    }
+  } catch (err) {
+    console.error(err);
+    showStatus('error', 'Error de red en polling');
+    observerLoading = false; // RELEASE LOCK
+  }
+}
+
 async function callObserver(force = false) {
   if (currentMode !== 'sgmi') return;
 
@@ -873,11 +976,11 @@ async function callObserver(force = false) {
 
   // Si no hay cambios y no es forzado, no llamar al LLM
   if (!force && currentHash === lastContextHash && lastAnalysis) {
-    showStatus('idle', `Sin cambios · ${formatTime(new Date())}`);
+    showStatus('idle', `Actualizado · ${formatTime(lastUpdateTime)}`);
     return;
   }
 
-  // Cancelar request anterior si existe
+  // Cancelar request anterior si existe (ahora es menos relevante pero mantenemos limpieza)
   if (currentController) {
     currentController.abort();
     currentController = null;
@@ -890,57 +993,60 @@ async function callObserver(force = false) {
   const isUpdate = lastAnalysis !== null;
   showLoading(isUpdate);
 
-  // Crear nuevo controller con timeout 60s
+  // Limpiar timers previos de seguridad
+  if (countdownTimer) clearTimeout(countdownTimer);
+  if (slowResponseTimer) clearTimeout(slowResponseTimer);
+
   currentController = new AbortController();
-  const timeoutId = setTimeout(() => {
-    if (currentController) currentController.abort();
-  }, 60000);
+
+  // Timer para mensaje lento (15s) - Feedback visual solamente
+  slowResponseTimer = setTimeout(() => {
+    // Solo si seguimos cargando
+    if (observerLoading) {
+        showStatus('analyzing', 'Modelo profundo, esperando respuesta...');
+    }
+  }, 15000);
 
   try {
+    // 1. Iniciar Task (POST) - Respuesta inmediata
     const res = await fetch('/lab/observer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patient_context: ctx, force: force }),
       signal: currentController.signal
     });
-    clearTimeout(timeoutId);
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.status === 'ok' && data.analysis) {
-        lastAnalysis = data.analysis;
-        lastContextHash = currentHash;
-        lastUpdateTime = new Date();
-        updateObserverUI(data.analysis);
-
-        // Status según resultado del LLM
-        const llmStatus = data.analysis.llm_status || 'connected';
-        if (llmStatus === 'connected') {
-          const ms = data.analysis.metrics?.response_time_ms || 0;
-          showStatus('updated', `${(ms/1000).toFixed(1)}s · ${formatTime(lastUpdateTime)}`);
-        } else if (llmStatus === 'waiting') {
-          showStatus('idle', 'Esperando contexto');
-        } else {
-          showStatus('idle', 'LLM no disponible');
-        }
-      }
-    } else {
-      // Solo errores HTTP reales (no del LLM)
+    if (!res.ok) {
       showStatus('error', `HTTP ${res.status}`);
+      observerLoading = false;
+      return;
     }
+
+    const data = await res.json();
+    const taskId = data.task_id;
+    
+    // 2. Iniciar Polling
+    // Nota: observerLoading se mantiene true hasta que el polling termine
+    pollObserverStatus(taskId);
+
   } catch (err) {
     if (err.name === 'AbortError') {
-      // Request cancelada o timeout - no es error real
       showStatus('idle', 'Cancelado');
     } else {
-      // Error real de red/infraestructura
       showStatus('error', 'Sin conexión al servidor');
     }
-  } finally {
     observerLoading = false;
+  } finally {
     currentController = null;
+    // IMPORTANTE: NO poner observerLoading = false aquí, 
+    // porque el polling sigue corriendo en background (promesa separada)
+    // El polling se encarga de liberar el loading.
   }
 }
+
+// Helper para liberar loading dentro de pollObserverStatus
+// Reescribimos para claridad
+
 
 function pollObserver() {
   if (currentMode !== 'sgmi') return;
@@ -964,34 +1070,167 @@ function stopPolling() {
   }
 }
 
+
+// =============================
+// AGENT ACTIVE LOGIC
+// =============================
+
+async function pollAgentStatus(taskId) {
+  try {
+    const res = await fetch(`/lab/agent/${taskId}`);
+    if (!res.ok) {
+        document.getElementById('agentStatus').innerText = "Error polling agent";
+        return;
+    }
+    
+    const data = await res.json();
+    
+    if (data.status === 'processing') {
+       setTimeout(() => pollAgentStatus(taskId), 1000);
+    } else {
+       // Done
+       document.getElementById('agentStatus').style.display = 'none';
+       document.getElementById('btnSendAgent').disabled = false;
+       
+       if (data.status === 'ok') {
+         if (data.task_status === 'error') {
+            document.getElementById('agentOutput').innerText = JSON.stringify(data.result, null, 2); 
+            document.getElementById('agentOutput').style.color = '#dc2626';
+         } else {
+            // Success
+             const result = data.result || {};
+             const answer = result.answer || JSON.stringify(result, null, 2);
+             document.getElementById('agentOutput').innerText = answer;
+             document.getElementById('agentOutput').style.color = '#334155';
+         }
+       } else {
+         document.getElementById('agentOutput').innerText = "Respuesta inválida del servidor";
+       }
+    }
+  } catch (err) {
+     console.error("Polling agent error", err);
+     document.getElementById('agentStatus').innerText = "Error de red";
+     document.getElementById('btnSendAgent').disabled = false;
+  }
+}
+
+async function callAgent() {
+  const input = document.getElementById('agentInput').value;
+  if (!input.trim()) return;
+
+  // Visual Setup
+  const btn = document.getElementById('btnSendAgent');
+  const status = document.getElementById('agentStatus');
+  const output = document.getElementById('agentOutput');
+
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.innerText = "Procesando...";
+  output.innerText = "";
+  
+  try {
+    // Get updated context
+    const ctx = getPatientContext();
+    const role = document.getElementById('agentRole').value;
+
+    const res = await fetch('/lab/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+          user_text: input, 
+          role: role,
+          patient_context: ctx,
+          options: {} 
+      })
+    });
+
+    if (!res.ok) {
+      status.innerText = `Error HTTP ${res.status}`;
+      btn.disabled = false;
+      return;
+    }
+
+    const data = await res.json();
+    const taskId = data.task_id;
+    
+    // Start Polling
+    pollAgentStatus(taskId);
+
+  } catch (err) {
+    status.innerText = "Error de conexión";
+    btn.disabled = false;
+  }
+}
+
+function startCountdown() {
+  if (observerLoading) return;
+  
+  if (countdownTimer) clearTimeout(countdownTimer);
+  
+  let count = 3;
+  showStatus('idle', `Nuevo análisis en ${count}`);
+  
+  const tick = () => {
+    count--;
+    if (count > 0) {
+      showStatus('idle', `Nuevo análisis en ${count}`);
+      countdownTimer = setTimeout(tick, 1000);
+    } else {
+      callObserver(false);
+    }
+  };
+  
+  countdownTimer = setTimeout(tick, 1000);
+}
+
 // =============================
 // Event Listeners
 // =============================
 const fields = [
   'patientName', 'patientAge', 'patientSex', 'clinicalPhase',
-  'reasonForVisit', 'medicalHistory', 'socioCultural', 'clinicalText',
-  'clinicalImpression'
+  'reasonForVisit', 'medicalHistory', 'socioCultural', 'clinicalText'
 ];
 
-// Los cambios manuales disparan análisis inmediato (con debounce)
-let inputDebounce = null;
+// Los cambios manuales disparan el countdown
 fields.forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     el.addEventListener('input', () => {
-      if (inputDebounce) clearTimeout(inputDebounce);
-      inputDebounce = setTimeout(() => callObserver(false), 1500);
+      startCountdown();
     });
   }
 });
 
-// Initial call + start polling
+// Initial call + start polling + Warmup Check
 document.addEventListener('DOMContentLoaded', () => {
+  checkWarmupStatus();
   setTimeout(() => {
     callObserver(true);
     startPolling();
   }, 500);
 });
+
+// Warmup / Connection Status Logic
+async function checkWarmupStatus() {
+    const el = document.getElementById('connectionStatus');
+    if (!el) return;
+
+    try {
+        const res = await fetch('/lab/status');
+        const data = await res.json();
+        
+        if (data.warmup_done) {
+            el.innerHTML = '<span style="color:#22c55e;">●</span> Motor cognitivo listo';
+        } else {
+            // Retry in 1s
+            setTimeout(checkWarmupStatus, 1000);
+        }
+    } catch (e) {
+        console.error("Status check failed", e);
+        // Retry slower
+        setTimeout(checkWarmupStatus, 3000);
+    }
+}
 </script>
 
 </body>
@@ -1066,46 +1305,199 @@ async def lab_post(request: Request, db: Session = Depends(get_db)):
 
 
 # =========================
+# System Status Endpoint
+# =========================
+@router.get("/lab/status")
+def get_lab_status():
+    """Retorna estado del sistema (warmup, db, etc)."""
+    return {
+        "status": "running",
+        "warmup_done": get_warmup_status()
+    }
+
+
+# =========================
 # Observer Agent Endpoint
 # =========================
 
-@router.post("/lab/observer")
-async def observer_analyze(request: ObserverRequest):
-    """
-    Endpoint para el ObserverAgent.
+# =========================
+# Async Task Store & Models
+# =========================
+from fastapi import BackgroundTasks
+import uuid
+from datetime import datetime
 
-    Analiza el contexto clínico de forma pasiva.
-    NO conversa, NO recomienda, NO diagnostica.
+# Simple in-memory task store
+# Structure: { task_id: { "status": "processing"|"done"|"error", "result": ..., "error": ... } }
+# Structure: { task_id: { "status": "processing"|"done"|"error", "result": ..., "error": ... } }
+tasks = {}
+tasks_agent = {}
 
-    Incluye throttling para evitar llamadas excesivas:
-    - Mínimo 2 segundos entre análisis
-    - O cambio de > 20 caracteres en el contexto
-    """
+import asyncio
+
+async def supervisor_loop():
+    """Calcula y limpia timeouts cada 12s."""
+    print("[SUPERVISOR] Iniciando loop de monitoreo (12s)...")
+    while True:
+        try:
+            await asyncio.sleep(12)
+            now = datetime.now()
+            
+            # Revisar Observer Tasks
+            for tid, t in tasks.items():
+                if t["status"] == "processing":
+                    started = datetime.fromisoformat(t["started_at"])
+                    if (now - started).total_seconds() > 60:
+                        tasks[tid] = {
+                            "status": "error",
+                            "error": "TIMEOUT_SUPERVISOR",
+                            "result": {"llm_error": "Timeout forzado por supervisor"}
+                        }
+                        print(f"[SUPERVISOR] Task {tid} timed out.")
+
+            # Revisar Agent Tasks
+            for tid, t in tasks_agent.items():
+                if t["status"] == "processing":
+                    started = datetime.fromisoformat(t["started_at"])
+                    if (now - started).total_seconds() > 60:
+                        tasks_agent[tid] = {
+                            "status": "error",
+                            "error": "TIMEOUT_SUPERVISOR",
+                            "result": {"answer": "Error: Timeout forzado por supervisor"}
+                        }
+                        print(f"[SUPERVISOR] Agent Task {tid} timed out.")
+                        
+        except Exception as e:
+            print(f"[SUPERVISOR] Error en loop: {e}")
+            await asyncio.sleep(5)  # Backoff ante error interno
+
+def start_supervisor():
+    """Inicia el supervisor en background (sin bloquear)."""
+    asyncio.create_task(supervisor_loop())
+
+def run_observer_background(task_id: str, patient_context: dict, force: bool):
+    """Background worker wrapper"""
     try:
         observer = get_observer()
         result = observer.analyze(
-            patient_context=request.patient_context.model_dump(),
-            force=request.force
+            patient_context=patient_context,
+            force=force
         )
-        # Siempre 200 - el status interno indica el resultado
-        return JSONResponse(content={
-            "status": "ok",
-            "analysis": result
-        })
+        tasks[task_id] = {
+            "status": "done",
+            "result": result,
+            "updated_at": datetime.now().isoformat()
+        }
     except Exception as e:
-        # Nunca 500 por errores de LLM - siempre 200 con status descriptivo
-        return JSONResponse(content={
-            "status": "ok",
-            "analysis": {
+        tasks[task_id] = {
+            "status": "error",
+            "result": {
                 "llm_status": "error",
                 "llm_error": str(e),
-                "high_impact": [],
-                "alternatives": [],
-                "discriminators": [],
-                "management_paths": [],
-                "pivot_triggers": [],
-                "metrics": {"response_time_ms": 0, "eval_count": 0},
                 "visual_indicator": "gray",
                 "mode": "observer",
-            }
-        })
+                "metrics": {"response_time_ms": 0, "eval_count": 0}
+            },
+            "error": str(e)
+        }
+
+@router.post("/lab/observer", status_code=202)
+async def observer_analyze(request: ObserverRequest, background_tasks: BackgroundTasks):
+    """
+    Endpoint ASYNC para el ObserverAgent.
+    Retorna inmediatamente un task_id.
+    """
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {"status": "processing", "started_at": datetime.now().isoformat()}
+
+    background_tasks.add_task(
+        run_observer_background, 
+        task_id, 
+        request.patient_context.model_dump(), 
+        request.force
+    )
+
+    return {"task_id": task_id, "status": "processing"}
+
+@router.get("/lab/observer/{task_id}")
+async def get_observer_result(task_id: str):
+    """Polling endpoint"""
+    task = tasks.get(task_id)
+    if not task:
+        return JSONResponse(status_code=404, content={"error": "Task not found"})
+    
+    if task["status"] == "processing":
+        return {"status": "processing"}
+    
+    # Return result consistent with previous schema
+    return {
+        "status": "ok", # API status ok
+        "task_status": task["status"],
+        "analysis": task["result"]
+    }
+
+
+# =========================
+# Agent Core Endpoint (Async)
+# =========================
+
+def run_agent_background(task_id: str, user_text: str, role: str, context: dict, options: dict):
+    """Background worker para Agent Core"""
+    try:
+        # Llamada al núcleo cognitivo real con ROL y CONTEXTO
+        result = run_llm(
+            user_text=user_text,
+            role=role,
+            context=context,
+            options=options
+        )
+        tasks_agent[task_id] = {
+            "status": "done",
+            "result": result,
+            "updated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        tasks_agent[task_id] = {
+            "status": "error",
+            "result": {
+                "answer": f"Error del agente: {str(e)}",
+                "tokens": 0,
+                "provider": "error"
+            },
+            "error": str(e)
+        }
+
+@router.post("/lab/agent", status_code=202)
+async def agent_analyze(request: AgentRequest, background_tasks: BackgroundTasks):
+    """
+    Endpoint ASYNC para el Agente Activo (Core).
+    """
+    task_id = str(uuid.uuid4())
+    tasks_agent[task_id] = {"status": "processing", "started_at": datetime.now().isoformat()}
+
+    background_tasks.add_task(
+        run_agent_background, 
+        task_id, 
+        request.user_text, 
+        request.role,
+        request.patient_context,
+        request.options or {}
+    )
+
+    return {"task_id": task_id, "status": "processing"}
+
+@router.get("/lab/agent/{task_id}")
+async def get_agent_result(task_id: str):
+    """Polling endpoint para Agent"""
+    task = tasks_agent.get(task_id)
+    if not task:
+        return JSONResponse(status_code=404, content={"error": "Task not found"})
+    
+    if task["status"] == "processing":
+        return {"status": "processing"}
+    
+    return {
+        "status": "ok",
+        "task_status": task["status"],
+        "result": task["result"]
+    }
