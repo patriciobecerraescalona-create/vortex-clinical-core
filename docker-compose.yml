@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://vortex_user:vortex_pass@db:5432/vortex
-      OLLAMA_URL: http://192.168.1.8:11434
+      OLLAMA_URL: http://localhost:11434
       OLLAMA_MODEL: qwen2.5:3b
     ports:
       - "8000:8000"

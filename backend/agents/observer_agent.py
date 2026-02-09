@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional, List, Tuple
 # =========================
 # CONFIGURACIÓN OLLAMA
 # =========================
-OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://192.168.1.8:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "60.0"))  # 60s LAB, objetivo <4s
 
