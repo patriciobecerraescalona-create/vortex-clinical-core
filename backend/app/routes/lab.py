@@ -82,6 +82,7 @@ def agents_lab_ui():
     UI Dedicada para Experimentación de Agentes (Benchmarking).
     Separada del flujo clínico SGMI.
     Endpoint explícito para benchmarking multi-LLM.
+    Exposed for VM deployment.
     """
     html = """
 <!DOCTYPE html>
