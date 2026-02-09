@@ -6,7 +6,7 @@ from backend.app.db.base import Base
 from backend.app.db.session import engine
 
 # Modelos (importar para registrar en Base.metadata)
-from backend.app.models import voice_event, memory_node, core  # noqa: F401
+from backend.app.models import voice_event, memory_node, core, agent_prompts  # noqa: F401
 
 # =========================
 # APP INIT

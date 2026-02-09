@@ -1,0 +1,8 @@
+INFO:     Started server process [41220]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8001): solo se permite un uso de cada direcci¾n de socket (protocolo/direcci¾n de red/puerto)
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+[WARN] DATABASE_URL no definida. Usando SQLite local (LAB mode).
+[SUPERVISOR] Iniciando loop de monitoreo (12s)...

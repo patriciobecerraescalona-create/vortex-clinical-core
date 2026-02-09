@@ -342,13 +342,16 @@ class ObserverAgent:
 
     def _call_ollama(self, context_text: str) -> Tuple[str, dict]:
         """Llama a Ollama API. Retorna (response, metrics)."""
-        url = f"{self.base_url}/api/generate"
+        url = f"{self.base_url}/api/chat"
 
         prompt = f"{PROMPT_OBSERVER}\n\n---\n{context_text}\n---\n\nJSON:"
+        
+        # Chat API format
+        messages = [{"role": "user", "content": prompt}]
 
         payload = {
             "model": self.model,
-            "prompt": prompt,
+            "messages": messages,
             "stream": False,
             "format": "json",
             "options": {
@@ -370,8 +373,12 @@ class ObserverAgent:
             "prompt_eval_count": data.get("prompt_eval_count", 0),
             "model_name": self.model,
         }
+        
+        # Parse content
+        msg = data.get("message", {})
+        content = msg.get("content", "{}")
 
-        return data.get("response", "{}"), metrics
+        return content, metrics
 
     def _validate_response(self, response_text: str) -> Tuple[bool, str]:
         """Valida que la respuesta no contenga patrones prohibidos."""
@@ -532,33 +539,60 @@ def get_observer() -> ThrottledObserver:
 
 def warmup_ollama() -> dict:
     """
-    Calienta el modelo Ollama con una consulta simple.
-    Llamar al iniciar el backend para reducir latencia del primer request real.
+    Calienta el modelo Ollama. Si el configurado falla, intenta con el primero disponible.
     """
     global _warmup_done
     if _warmup_done:
         return {"status": "already_warm"}
 
-    url = f"{OLLAMA_BASE_URL}/api/generate"
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": "Responde OK",
-        "stream": False,
-        "options": {"num_predict": 5}
-    }
+    target_model = OLLAMA_MODEL
+    url_chat = f"{OLLAMA_BASE_URL}/api/chat"
+    url_tags = f"{OLLAMA_BASE_URL}/api/tags"
 
+    # 1. Intentar modelo configurado
     try:
-        start = time.time()
-        with httpx.Client(timeout=60.0) as client:
-            response = client.post(url, json=payload)
-            response.raise_for_status()
-        elapsed = time.time() - start
+        print(f"[WARMUP] Intentando warmup con '{target_model}'...")
+        _ping_ollama(url_chat, target_model)
         _warmup_done = True
-        print(f"[WARMUP] Ollama {OLLAMA_MODEL} listo en {elapsed:.1f}s")
-        return {"status": "ok", "time_s": round(elapsed, 1)}
+        return {"status": "ok", "model": target_model}
     except Exception as e:
-        print(f"[WARMUP] Error: {e}")
+        print(f"[WARMUP] Falló modelo '{target_model}': {e}")
+        
+    # 2. Fallback: Buscar cualquier modelo disponible
+    try:
+        print("[WARMUP] Buscando modelos alternativos...")
+        with httpx.Client(timeout=5.0) as client:
+            res = client.get(url_tags)
+            res.raise_for_status()
+            models = res.json().get("models", [])
+            
+        if not models:
+            raise Exception("No hay modelos disponibles en Ollama.")
+            
+        fallback_model = models[0]["name"]
+        print(f"[WARMUP] Intentando fallback con '{fallback_model}'...")
+        _ping_ollama(url_chat, fallback_model)
+        
+        # Guardamos la advertencia pero marcamos listo
+        _warmup_done = True
+        print(f"[WARMUP] Fallback exitoso con '{fallback_model}'")
+        return {"status": "ok_fallback", "model": fallback_model}
+        
+    except Exception as e:
+        print(f"[WARMUP] Error CRÍTICO: {e}")
         return {"status": "error", "error": str(e)}
+
+def _ping_ollama(url: str, model: str):
+    """Envía un ping simple a Ollama."""
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "OK"}],
+        "stream": False,
+        "options": {"num_predict": 1}
+    }
+    with httpx.Client(timeout=30.0) as client:
+        res = client.post(url, json=payload)
+        res.raise_for_status()
 
 
 def get_warmup_status() -> bool:

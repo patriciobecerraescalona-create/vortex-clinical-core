@@ -12,7 +12,8 @@ from backend.app.services.agent_context import get_user_context
 
 # ObserverAgent para análisis pasivo
 from backend.agents.observer_agent import get_observer, get_warmup_status
-from backend.app.services.llm_agent import run_llm
+from backend.agents.observer_agent import get_observer, get_warmup_status
+from backend.app.services.llm_agent import run_llm, get_ollama_models
 
 router = APIRouter()
 
@@ -52,11 +53,28 @@ class AgentRequest(BaseModel):
     role: str = "clinical"
     patient_context: dict = {}
     options: Optional[dict] = None
+    # Lab Params
+    provider: str = "ollama"
+    model: str = ""
+    raw: bool = False
+    mode: str = "work"
 
 
 # =========================
 # UI Unificada LAB (GET)
 # =========================
+
+# =========================
+# UI Unificada LAB (GET)
+# =========================
+
+@router.get("/lab/models")
+def get_lab_models():
+    """Proxy para obtener modelos de Ollama."""
+    import os
+    base_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    models = get_ollama_models(base_url)
+    return {"models": models, "base_url": base_url}
 
 @router.get("/lab", response_class=HTMLResponse)
 def lab_ui():
@@ -66,6 +84,8 @@ def lab_ui():
     2. Agentes Vortex (placeholder)
     """
     html = """
+
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -84,7 +104,7 @@ def lab_ui():
     /* Header */
     .lab-header {
       background: #1e293b;
-      padding: 16px 24px;
+      padding: 12px 24px;
       border-bottom: 1px solid #334155;
       display: flex;
       align-items: center;
@@ -97,396 +117,200 @@ def lab_ui():
       margin: 0;
     }
     .lab-subtitle {
-      font-size: 12px;
+      font-size: 11px;
       color: #64748b;
       margin-top: 2px;
     }
 
-    /* Mode Switcher */
-    .mode-switcher {
+    /* Controls Bar (Top) */
+    .controls-bar {
       display: flex;
-      gap: 8px;
+      gap: 12px;
+      align-items: center;
+      background: #0f172a;
+      padding: 10px 24px;
+      border-bottom: 1px solid #1e293b;
+      flex-wrap: wrap;
     }
-    .mode-btn {
-      padding: 8px 16px;
-      border: 1px solid #475569;
-      background: transparent;
-      color: #94a3b8;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.2s;
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
-    .mode-btn:hover {
-      background: #334155;
-      color: #e5e7eb;
+    .ctrl-label {
+        font-size: 10px;
+        color: #64748b;
+        text-transform: uppercase;
     }
-    .mode-btn.active {
-      background: #3b82f6;
-      border-color: #3b82f6;
-      color: #fff;
+    .ctrl-select, .ctrl-input {
+        background: #1e293b;
+        border: 1px solid #334155;
+        color: #cbd5e1;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
     }
-    .mode-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    
+    /* Toggle Switch */
+    .toggle-switch {
+        position: relative;
+        width: 36px;
+        height: 20px;
     }
+    .toggle-checkbox { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #334155;
+        transition: .4s;
+        border-radius: 20px;
+    }
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    .toggle-checkbox:checked + .toggle-slider { background-color: #3b82f6; }
+    .toggle-checkbox:checked + .toggle-slider:before { transform: translateX(16px); }
+
 
     /* Main Layout */
     .lab-container {
       display: flex;
-      height: calc(100vh - 65px);
+      height: calc(100vh - 115px); /* Header + Controls approx */
+    }
+    .lab-sidebar {
+      width: 260px;
+      background: #0f172a;
+      border-right: 1px solid #1e293b;
+      display: flex;
+      flex-direction: column;
     }
     .lab-main {
       flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-    }
-    .lab-sidebar {
-      width: 340px;
-      background: #0f172a;
-      border-left: 1px solid #1e293b;
-      padding: 20px;
-      overflow-y: auto;
-    }
-
-    /* Sections */
-    .section {
-      background: #1e293b;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-    .section-title {
-      font-size: 12px;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .section-title::before {
-      content: '';
-      width: 3px;
-      height: 12px;
-      background: #3b82f6;
-      border-radius: 2px;
-    }
-
-    /* Form Grid */
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    .form-group {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      background: #0b1020;
     }
-    .form-group.full-width {
-      grid-column: 1 / -1;
+    
+    /* Chat Area */
+    .chat-history {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
     }
-    .form-group label {
-      font-size: 11px;
-      color: #64748b;
-      text-transform: uppercase;
+    .chat-input-area {
+        padding: 20px;
+        background: #1e293b;
+        border-top: 1px solid #334155;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
     }
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-      background: #0f172a;
-      border: 1px solid #334155;
-      color: #e5e7eb;
-      padding: 10px 12px;
-      border-radius: 6px;
-      font-size: 14px;
-      transition: border-color 0.2s;
+    .chat-input {
+        flex: 1;
+        background: #0f172a;
+        border: 1px solid #334155;
+        color: #e5e7eb;
+        padding: 12px;
+        border-radius: 8px;
+        font-family: inherit;
+        resize: none;
+        min-height: 50px;
     }
-    .form-group input:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-      outline: none;
-      border-color: #3b82f6;
+    .btn-send {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 0 20px;
+        height: 50px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.2s;
     }
-    .form-group textarea {
-      resize: vertical;
-      min-height: 80px;
+    .btn-send:hover { background: #2563eb; }
+    .btn-send:disabled {
+        background: #475569;
+        cursor: not-allowed;
     }
+    
+    /* Bubbles */
+    .bubble {
+        max-width: 80%;
+        padding: 12px 16px;
+        border-radius: 12px;
+        line-height: 1.5;
+        font-size: 14px;
+        position: relative;
+    }
+    .bubble.user {
+        align-self: flex-end;
+        background: #2563eb;
+        color: white;
+        border-top-right-radius: 2px;
+    }
+    .bubble.agent {
+        align-self: flex-start;
+        background: #1e293b;
+        color: #e2e8f0;
+        border: 1px solid #334155;
+        border-top-left-radius: 2px;
+    }
+    
+    /* Metrics Footer */
+    .msg-footer {
+        font-size: 10px;
+        color: #64748b;
+        margin-top: 6px;
+        display: flex;
+        gap: 10px;
+        border-top: 1px solid #334155;
+        padding-top: 4px;
+        flex-wrap: wrap;
+    }
+    .metric-tag {
+        display: flex;
+        gap: 4px;
+    }
+    
+    /* Sidebar List */
+    .history-list {
+        overflow-y: auto;
+        flex: 1;
+    }
+    .history-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #1e293b;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .history-item:hover { background: #1e293b; }
+    .history-item.active { background: #334155; border-left: 3px solid #3b82f6; }
+    .h-title { font-size: 13px; color: #e2e8f0; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+    .h-meta { font-size: 11px; color: #64748b; display: flex; justify-content: space-between; }
 
-    /* Observer Panel */
-    .observer-panel {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-    }
-    .observer-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      border-bottom: 1px solid #1e293b;
-    }
-    .semaforo {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: #22c55e;
-      box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
-      transition: all 0.3s;
-    }
-    .semaforo.yellow {
-      background: #eab308;
-      box-shadow: 0 0 10px rgba(234, 179, 8, 0.4);
-    }
-    .semaforo.red {
-      background: #ef4444;
-      box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
-    }
-    .semaforo.gray {
-      background: #64748b;
-      box-shadow: none;
-    }
-    .observer-title {
-      font-size: 13px;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .observer-phase {
-      margin-left: auto;
-      font-size: 11px;
-      color: #22d3ee;
-      background: #164e63;
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-    .observer-status {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      background: #0a0f1a;
-      border-bottom: 1px solid #1e293b;
-      font-size: 11px;
-      color: #94a3b8;
-    }
-    .observer-status .spinner {
-      width: 10px;
-      height: 10px;
-      border: 2px solid #334155;
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    .observer-content {
-      padding: 16px;
-    }
-    .observer-section {
-      margin-bottom: 16px;
-    }
-    .observer-section:last-child {
-      margin-bottom: 0;
-    }
-    .observer-label {
-      font-size: 10px;
-      color: #64748b;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-    .observer-summary {
-      font-size: 14px;
-      color: #e5e7eb;
-      line-height: 1.5;
-    }
-    .observer-patterns {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .observer-patterns li {
-      padding: 8px 12px;
-      background: #1e293b;
-      border-radius: 4px;
-      margin-bottom: 6px;
-      font-size: 13px;
-      color: #cbd5e1;
-      border-left: 3px solid #3b82f6;
-    }
-    .observer-notes {
-      font-size: 12px;
-      color: #94a3b8;
-      font-style: italic;
-      line-height: 1.5;
-    }
-    .observer-loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      padding: 30px;
-      color: #64748b;
-    }
-    .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid #334155;
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .observer-empty {
-      text-align: center;
-      padding: 30px;
-      color: #475569;
-      font-size: 13px;
-    }
-
-    /* Placeholder Mode */
-    .placeholder-mode {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: #475569;
-      text-align: center;
-    }
-    .placeholder-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.5;
-    }
-    .placeholder-text {
-      font-size: 14px;
-      max-width: 300px;
-      line-height: 1.6;
-    }
-
-    /* Observer - Insufficient */
-    .insufficient-section {
-      text-align: center;
-      padding: 24px 12px;
-    }
-    .insufficient-msg {
-      font-size: 12px;
-      color: #64748b;
-    }
-    .missing-list {
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 8px;
-    }
-
-    /* Observer Labels */
-    .label-red { color: #f87171 !important; }
-    .label-yellow { color: #fbbf24 !important; }
-    .label-green { color: #4ade80 !important; }
-    .label-orange { color: #fb923c !important; }
-
-    /* Item Lists */
-    .item-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .item-list li {
-      padding: 6px 0;
-      font-size: 12px;
-      color: #e5e7eb;
-      border-bottom: 1px solid #1e293b;
-    }
-    .item-list li:last-child {
-      border-bottom: none;
-    }
-    .item-list li strong {
-      color: #f8fafc;
-    }
-    .rationale {
-      display: block;
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 2px;
-    }
-    .diff-info {
-      display: block;
-      font-size: 11px;
-      color: #67e8f9;
-      margin-top: 2px;
-    }
-
-    /* High Impact (red) */
-    .high-impact-section {
-      background: rgba(239, 68, 68, 0.1);
-      border-left: 3px solid #ef4444;
-      border-radius: 4px;
-      padding: 8px 10px;
-    }
-
-    /* Alternatives (yellow) */
-    .alternatives-section {
-      background: rgba(234, 179, 8, 0.08);
-      border-left: 3px solid #eab308;
-      border-radius: 4px;
-      padding: 8px 10px;
-    }
-
-    /* Discriminators */
-    .discriminators-section {
-      background: #0f172a;
-      border-left: 3px solid #3b82f6;
-      border-radius: 4px;
-      padding: 8px 10px;
-    }
-    .disc-list li {
-      border-bottom: none;
-      padding: 4px 0;
-    }
-
-    /* Management (green) */
-    .management-section {
-      background: rgba(34, 197, 94, 0.08);
-      border-left: 3px solid #22c55e;
-      border-radius: 4px;
-      padding: 8px 10px;
-    }
-
-    /* Triggers (orange) */
-    .triggers-section {
-      background: rgba(251, 146, 60, 0.1);
-      border-left: 3px solid #f97316;
-      border-radius: 4px;
-      padding: 8px 10px;
-    }
-    .trigger-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .trigger-list li {
-      padding: 4px 0;
-      font-size: 11px;
-      color: #fdba74;
-    }
-
-    /* Metrics Bar */
-    .metrics-bar {
-      display: flex;
-      justify-content: space-between;
-      padding: 6px 8px;
-      background: #0a0f1a;
-      border-radius: 4px;
-      font-size: 10px;
-      color: #64748b;
-      margin-top: 8px;
-    }
-
-    /* Hidden */
+    /* Utility */
     .hidden { display: none !important; }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #64748b;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -495,748 +319,474 @@ def lab_ui():
 <header class="lab-header">
   <div>
     <h1 class="lab-title">Vortex Clinical LAB</h1>
-    <p class="lab-subtitle">Entorno de pruebas cognitivas</p>
+    <p class="lab-subtitle">Experimentación Cognitiva</p>
   </div>
-  <div class="mode-switcher">
-    <button id="btnModeSGMI" class="mode-btn active" onclick="setMode('sgmi')">
-      SGMI · Observador
-    </button>
-    <button id="btnModeVortex" class="mode-btn" onclick="setMode('vortex')">
-      Agentes Vortex
-    </button>
+  <div>
+       <!-- Future status indicators -->
   </div>
 </header>
 
-<!-- Main Container -->
-<div class="lab-container">
-
-  <!-- =====================
-       SGMI MODE (Active)
-       ===================== -->
-  <div id="sgmiMode" class="lab-main">
-
-    <!-- Patient Context -->
-    <div class="section">
-      <div class="section-title">Contexto del Paciente</div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="patientName">Nombre</label>
-          <input type="text" id="patientName" value="Juan Pérez" />
-        </div>
-        <div class="form-group">
-          <label for="patientAge">Edad</label>
-          <input type="number" id="patientAge" value="45" min="0" max="150" />
-        </div>
-        <div class="form-group">
-          <label for="patientSex">Sexo</label>
-          <select id="patientSex">
-            <option value="M" selected>Masculino</option>
-            <option value="F">Femenino</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="clinicalPhase">Fase clínica</label>
-          <select id="clinicalPhase">
-            <option value="chief_complaint" selected>1. Motivo de consulta</option>
-            <option value="history" disabled>2. Historia clínica</option>
-            <option value="physical_exam" disabled>3. Examen físico</option>
-            <option value="hypothesis" disabled>4. Hipótesis</option>
-          </select>
-        </div>
-        <div class="form-group full-width">
-          <label for="reasonForVisit">Motivo de consulta</label>
-          <input type="text" id="reasonForVisit" value="Dolor de estómago" />
-        </div>
-        <div class="form-group full-width">
-          <label for="medicalHistory">Antecedentes médicos</label>
-          <input type="text" id="medicalHistory" value="HTA, gastritis crónica" />
-        </div>
-        <div class="form-group full-width">
-          <label for="socioCultural">Contexto socio-cultural</label>
-          <input type="text" id="socioCultural" value="Trabajo nocturno, alimentación irregular" />
-        </div>
+<div id="vortexInterface">
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+      <div class="ctrl-group">
+        <label class="ctrl-label">Provider</label>
+        <select id="PROVIDER" class="ctrl-select" onchange="toggleModelInput()">
+            <option value="ollama" selected>Ollama (Local)</option>
+            <option value="openai">OpenAI (Cloud)</option>
+        </select>
       </div>
-    </div>
-
-    <!-- Clinical Text -->
-    <div class="section">
-      <div class="section-title">Anamnesis</div>
-      <div class="form-group full-width">
-        <textarea id="clinicalText" rows="4" placeholder="Descripción clínica...">Paciente indica dolor de estómago con vómitos reiterados de 3 días.</textarea>
-      </div>
-    </div>
-
-    </div>
-
-
-
-  <!-- =====================
-       VORTEX MODE (Placeholder)
-       ===================== -->
-  <div id="vortexMode" class="lab-main hidden">
-    <!-- Input Section -->
-    <div class="section">
-      <div class="section-title">Agente Activo (Vortex Core)</div>
       
-      <!-- Role and Connection Status Bar -->
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <!-- Role Selector -->
-        <div class="form-group" style="flex:1; max-width:200px; margin:0;">
-          <select id="agentRole" style="padding:6px; font-size:12px; height:32px;">
-             <option value="clinical" selected>🏥 Clínico (Experto)</option>
-             <option value="administrative">📋 Administrativo</option>
-             <option value="commercial">💼 Comercial</option>
-             <option value="personal">🧘 Asistente Personal</option>
-             <option value="support">🛠️ Soporte Técnico</option>
-          </select>
-        </div>
-        
-        <!-- Connection Status -->
-        <div id="connectionStatus" style="font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:6px;">
-           <div class="spinner" style="width:10px; height:10px; border-width:1px;"></div>
-           Conectando al motor...
+      <div class="ctrl-group">
+        <label class="ctrl-label">Model <span id="modelBadge" style="font-size:9px; border-radius:3px; padding:1px 3px; display:none;"></span></label>
+        <div style="position:relative;">
+            <input type="text" id="MODEL" class="ctrl-input" placeholder="qwen2.5:3b" value="" list="ollamaModels" style="width:140px;" oninput="validateModel()">
+            <datalist id="ollamaModels"></datalist>
+            <datalist id="openaiModels">
+                <option value="gpt-4o"></option>
+                <option value="gpt-4.1"></option>
+                <option value="gpt-4-turbo"></option>
+                <option value="gpt-3.5-turbo"></option>
+            </datalist>
         </div>
       </div>
-
-      <div class="form-group full-width">
-        <textarea id="agentInput" rows="4" placeholder="Escribe tu consulta al agente...">Paciente de 45 años con dolor abdominal...</textarea>
+      
+      <div class="ctrl-group">
+        <label class="ctrl-label">Agent Role</label>
+        <select id="AGENT" class="ctrl-select">
+            <option value="clinical" selected>🏥 Clínico</option>
+            <option value="administrative">📋 Administrativo</option>
+            <option value="commercial">💼 Comercial</option>
+            <option value="personal">🧘 Asistente</option>
+            <option value="support">🛠️ Soporte</option>
+        </select>
       </div>
-      <div class="form-actions right">
-        <button id="btnSendAgent" class="lab-btn primary" onclick="callAgent()">
-          Enviar Consulta
-        </button>
+      
+      <div class="ctrl-group">
+        <label class="ctrl-label">Cognitive Mode</label>
+        <select id="MODE" class="ctrl-select">
+            <option value="work" selected>Work (Professional)</option>
+            <option value="life">Life (Personal)</option>
+        </select>
+      </div>
+      
+      <div class="ctrl-group" style="align-items:center;">
+        <label class="ctrl-label" style="margin-bottom:4px">RAW MODE</label>
+        <label class="toggle-switch">
+            <input type="checkbox" id="RAW" class="toggle-checkbox">
+            <span class="toggle-slider"></span>
+        </label>
+      </div>
+      
+      <div style="flex:1;"></div>
+      
+      <div class="ctrl-group" style="text-align:right;">
+        <label class="ctrl-label">Session Cost</label>
+        <div style="font-size:14px; color:#10b981; font-weight:bold;">$ <span id="sessionCost">0.0000</span></div>
       </div>
     </div>
 
-    <!-- Agent Output Section -->
-    <div class="section">
-      <div class="section-title">Respuesta Cognitiva</div>
-      <div id="agentStatus" class="agent-status" style="display:none; color:#64748b; margin-bottom:10px;">
-        <span class="spinner">●</span> Procesando...
-      </div>
-      <div id="agentOutput" class="agent-output" style="
-          min-height: 100px;
-          padding: 15px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 6px;
-          font-family: monospace;
-          white-space: pre-wrap;
-          color: #334155;">
-        Esperando input...
-      </div>
-    </div>
-  </div>
+    <!-- Main Container -->
+    <div class="lab-container">
+      
+      <!-- Sidebar (History) -->
+      <aside class="lab-sidebar">
+         <div style="padding:16px; border-bottom:1px solid #1e293b; font-size:12px; color:#94a3b8; font-weight:600; text-transform:uppercase;">
+            HISTORY (IN-MEMORY)
+         </div>
+         <div id="historyList" class="history-list">
+            <!-- Items added via JS -->
+         </div>
+         <div style="padding:12px; border-top:1px solid #1e293b;">
+            <button onclick="createNewSession()" class="btn-send" style="width:100%; height:40px; font-size:13px; background:#475569;">+ New Chat</button>
+         </div>
+      </aside>
 
-  <!-- =====================
-       SIDEBAR: Observer Panel
-       ===================== -->
-  <aside class="lab-sidebar">
-    <div class="observer-panel">
-      <div class="observer-header">
-        <div id="semaforo" class="semaforo"></div>
-        <span class="observer-title">Contraste Clínico</span>
-        <span id="phaseLabel" class="observer-phase">—</span>
-      </div>
-      <div id="observerStatus" class="observer-status">
-        <span style="color:#64748b;">●</span> <span>Iniciando...</span>
-      </div>
-      <div id="observerContent" class="observer-content">
-        <div class="observer-empty">
-          Esperando contexto clínico...
-        </div>
-      </div>
+      <!-- Main Chat -->
+      <main class="lab-main">
+         <div id="chatHistory" class="chat-history">
+            <!-- Bubbles go here -->
+         </div>
+         
+         <div class="chat-input-area">
+             <textarea id="userInput" class="chat-input" placeholder="Escribe tu mensaje aquí..." rows="2"></textarea>
+             <button id="btnSend" class="btn-send" onclick="sendMessage()">ENVIAR</button>
+         </div>
+      </main>
+      
     </div>
-  </aside>
-
 </div>
 
 <script>
 // =============================
-// Mode Management
+// STATE MANAGEMENT (Client Side)
 // =============================
-let currentMode = 'sgmi';
-
-function setMode(mode) {
-  currentMode = mode;
-
-  // Update buttons
-  document.getElementById('btnModeSGMI').classList.toggle('active', mode === 'sgmi');
-  document.getElementById('btnModeVortex').classList.toggle('active', mode === 'vortex');
-
-  // Toggle views
-  document.getElementById('sgmiMode').classList.toggle('hidden', mode !== 'sgmi');
-  document.getElementById('vortexMode').classList.toggle('hidden', mode !== 'vortex');
-
-  // In SGMI mode, trigger observer update
-  if (mode === 'sgmi') {
-    callObserver(true);
-  }
-}
+// Structure: [ { id, title, timestamp, messages: [], totalCost: 0.0 } ]
+let sessions = [];
+let currentSessionId = null;
 
 // =============================
-// Observer Agent
+// INIT
 // =============================
-let observerLoading = false;
-let lastContextHash = '';
-let lastAnalysis = null;
-let lastUpdateTime = null;
-let pollingInterval = null;
-let currentController = null;  // AbortController activo
-let countdownTimer = null;
-let slowResponseTimer = null;
-const POLL_INTERVAL_MS = 15000;  // 15 segundos (más espacio para análisis largo)
-
-function getPatientContext() {
-  return {
-    patient_name: document.getElementById('patientName').value || '',
-    patient_age: parseInt(document.getElementById('patientAge').value) || 0,
-    patient_sex: document.getElementById('patientSex').value || '',
-    medical_history: document.getElementById('medicalHistory').value || '',
-    socio_cultural: document.getElementById('socioCultural').value || '',
-    reason_for_visit: document.getElementById('reasonForVisit').value || '',
-    clinical_text: document.getElementById('clinicalText').value || '',
-    clinical_phase: document.getElementById('clinicalPhase').value || 'anamnesis'
-  };
-}
-
-function hashContext(ctx) {
-  // Simple hash del contexto para comparación
-  const str = JSON.stringify(ctx);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash.toString();
-}
-
-function hasContextChanged() {
-  const currentHash = hashContext(getPatientContext());
-  return currentHash !== lastContextHash;
-}
-
-function formatTime(date) {
-  return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-function showStatus(status, message) {
-  const statusEl = document.getElementById('observerStatus');
-  if (!statusEl) return;
-
-  const icons = {
-    'analyzing': '<div class="spinner"></div>',
-    'updating': '<div class="spinner"></div>',
-    'updated': '<span style="color:#22c55e;">●</span>',
-    'idle': '<span style="color:#64748b;">●</span>',
-    'error': '<span style="color:#ef4444;">●</span>'
-  };
-
-  statusEl.innerHTML = `${icons[status] || ''} <span>${message}</span>`;
-}
-
-function showLoading(isUpdate = false) {
-  const msg = 'Analizando razonamiento clínico profundo...';
-  showStatus(isUpdate ? 'updating' : 'analyzing', msg);
-
-  if (!lastAnalysis) {
-    document.getElementById('observerContent').innerHTML = `
-      <div class="observer-loading">
-        <div class="spinner"></div>
-        <span style="font-size:11px;">${msg}</span>
-      </div>
-    `;
-  }
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function updateObserverUI(analysis) {
-  const semaforo = document.getElementById('semaforo');
-  const phaseLabel = document.getElementById('phaseLabel');
-  const content = document.getElementById('observerContent');
-
-  // Estados: ok, waiting, error
-  const llmStatus = analysis.llm_status || 'ok';
-  const isError = llmStatus === 'error';
-  const isWaiting = llmStatus === 'waiting';
-  const metrics = analysis.metrics || {};
-
-  // Semaforo basado en visual_indicator
-  semaforo.className = 'semaforo';
-  if (isError || isWaiting || analysis.visual_indicator === 'gray') {
-    semaforo.classList.add('gray');
-  } else if (analysis.visual_indicator === 'yellow') {
-    semaforo.classList.add('yellow');
-  } else if (analysis.visual_indicator === 'red') {
-    semaforo.classList.add('red');
-  }
-
-  // Badge según estado
-  if (isError) {
-    phaseLabel.textContent = 'ERROR';
-    phaseLabel.style.background = '#7f1d1d';
-    phaseLabel.style.color = '#fca5a5';
-  } else if (isWaiting || analysis.insufficient) {
-    phaseLabel.textContent = 'ESPERA';
-    phaseLabel.style.background = '#334155';
-    phaseLabel.style.color = '#94a3b8';
-  } else if (analysis.no_additional) {
-    phaseLabel.textContent = 'OK';
-    phaseLabel.style.background = '#14532d';
-    phaseLabel.style.color = '#86efac';
-  } else {
-    const ms = metrics.response_time_ms || 0;
-    const model = metrics.model_name || 'ollama';
-    const tokens = metrics.eval_count || 0;
-    phaseLabel.textContent = `${model} · ${(ms/1000).toFixed(1)}s · ${tokens} tokens`;
-    phaseLabel.style.background = ms > 4000 ? '#92400e' : '#14532d';
-    phaseLabel.style.color = ms > 4000 ? '#fde047' : '#86efac';
-  }
-
-  let html = '';
-
-  // Error del LLM (no de infraestructura)
-  if (isError) {
-    html = `<div class="observer-section"><div style="color:#fca5a5;font-size:12px;">${escapeHtml(analysis.llm_error || 'Error del modelo')}</div></div>`;
-    content.innerHTML = html;
-    return;
-  }
-
-  // Waiting - contexto insuficiente (no se llamó al LLM)
-  if (isWaiting || analysis.insufficient) {
-    const missing = Array.isArray(analysis.missing) ? analysis.missing : [];
-    html = `
-      <div class="observer-section insufficient-section">
-        <div class="insufficient-msg">Completa anamnesis</div>
-        ${missing.length > 0 ? `<div class="missing-list">Falta: ${missing.join(', ')}</div>` : ''}
-      </div>
-    `;
-    content.innerHTML = html;
-    return;
-  }
-
-  // Sin aporte adicional (LLM respondió pero no hay info nueva)
-  if (analysis.no_additional) {
-    html = `
-      <div class="observer-section" style="text-align:center;padding:20px;">
-        <div style="color:#94a3b8;font-size:12px;">Sin aporte clínico adicional en este momento</div>
-      </div>
-    `;
-    content.innerHTML = html;
-    return;
-  }
-
-  // 1. ALTO IMPACTO (rojo)
-  const highImpact = Array.isArray(analysis.high_impact) ? analysis.high_impact : [];
-  if (highImpact.length > 0) {
-    html += `
-      <div class="observer-section high-impact-section">
-        <div class="observer-label label-red">A Descartar (Alto Impacto)</div>
-        <ul class="item-list">
-          ${highImpact.map(h => `<li><strong>${escapeHtml(h.scenario || h)}</strong>${h.rationale ? `<span class="rationale">${escapeHtml(h.rationale)}</span>` : ''}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  // 2. ALTERNATIVAS
-  const alts = Array.isArray(analysis.alternatives) ? analysis.alternatives : [];
-  if (alts.length > 0) {
-    html += `
-      <div class="observer-section alternatives-section">
-        <div class="observer-label label-yellow">Alternativas</div>
-        <ul class="item-list">
-          ${alts.map(a => `<li><strong>${escapeHtml(a.scenario || a)}</strong>${a.rationale ? `<span class="rationale">${escapeHtml(a.rationale)}</span>` : ''}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  // 3. DISCRIMINADORES
-  const discs = Array.isArray(analysis.discriminators) ? analysis.discriminators : [];
-  if (discs.length > 0) {
-    html += `
-      <div class="observer-section discriminators-section">
-        <div class="observer-label">Estudios Diferenciadores</div>
-        <ul class="item-list disc-list">
-          ${discs.map(d => `<li><strong>${escapeHtml(d.test || d)}</strong>${d.differentiates ? `<span class="diff-info">→ ${escapeHtml(d.differentiates)}</span>` : ''}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  // 4. MANEJO
-  const paths = Array.isArray(analysis.management_paths) ? analysis.management_paths : [];
-  if (paths.length > 0) {
-    html += `
-      <div class="observer-section management-section">
-        <div class="observer-label label-green">Escenarios de Manejo</div>
-        <ul class="item-list">
-          ${paths.map(p => `<li><strong>${escapeHtml(p.path || p)}</strong>${p.when ? `<span class="rationale">${escapeHtml(p.when)}</span>` : ''}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  // 5. TRIGGERS
-  const triggers = Array.isArray(analysis.pivot_triggers) ? analysis.pivot_triggers : [];
-  if (triggers.length > 0) {
-    html += `
-      <div class="observer-section triggers-section">
-        <div class="observer-label label-orange">Cambian Conducta</div>
-        <ul class="trigger-list">
-          ${triggers.map(t => `<li>${escapeHtml(String(t))}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  // Métricas (footer)
-  if (metrics.response_time_ms > 0) {
-    html += `
-      <div class="metrics-bar">
-        <span>${metrics.response_time_ms}ms</span>
-        <span>${metrics.eval_count || 0} tok</span>
-      </div>
-    `;
-  }
-
-  if (!html) {
-    html = '<div class="observer-empty">Sin observaciones.</div>';
-  }
-
-  content.innerHTML = html;
-}
-
-async function pollObserverStatus(taskId) {
-  try {
-    const res = await fetch(`/lab/observer/${taskId}`);
-    if (!res.ok) {
-        showStatus('error', `Error polling task: ${res.status}`);
-        observerLoading = false;
-        return;
-    }
-    
-    const data = await res.json();
-    
-    if (data.status === 'processing') {
-      // Sigue procesando, volver a consultar en 1s
-      setTimeout(() => pollObserverStatus(taskId), 1000);
-      return;
-    }
-    
-    // Task completada (status 'ok')
-    if (data.status === 'ok') {
-      observerLoading = false; // RELEASE LOCK
-      
-      // Verificar status interno del análisis
-      if (data.task_status === 'error') {
-         // Error de ejecución del LLM
-         const err = data.analysis.llm_error || 'Error desconocido';
-         showStatus('error', err);
-         updateObserverUI(data.analysis); // Mostrar error visual
-      } else {
-         // Éxito
-         lastAnalysis = data.analysis;
-         lastContextHash = hashContext(getPatientContext()); // Update hash
-         lastUpdateTime = new Date();
-         updateObserverUI(data.analysis);
-
-         const llmStatus = data.analysis.llm_status || 'connected';
-         if (llmStatus === 'connected' || llmStatus === 'ok') {
-            showStatus('updated', `Actualizado · ${formatTime(lastUpdateTime)}`);
-         } else if (llmStatus === 'waiting') {
-            showStatus('idle', 'Esperando contexto');
-         } else {
-            showStatus('idle', 'LLM no disponible');
-         }
-      }
-    } else {
-      showStatus('error', 'Respuesta inesperada del servidor');
-      observerLoading = false; // RELEASE LOCK
-    }
-  } catch (err) {
-    console.error(err);
-    showStatus('error', 'Error de red en polling');
-    observerLoading = false; // RELEASE LOCK
-  }
-}
-
-async function callObserver(force = false) {
-  if (currentMode !== 'sgmi') return;
-
-  const ctx = getPatientContext();
-  const currentHash = hashContext(ctx);
-
-  // Si no hay cambios y no es forzado, no llamar al LLM
-  if (!force && currentHash === lastContextHash && lastAnalysis) {
-    showStatus('idle', `Actualizado · ${formatTime(lastUpdateTime)}`);
-    return;
-  }
-
-  // Cancelar request anterior si existe (ahora es menos relevante pero mantenemos limpieza)
-  if (currentController) {
-    currentController.abort();
-    currentController = null;
-  }
-
-  // Bloquear nuevas requests mientras esta está activa
-  if (observerLoading) return;
-  observerLoading = true;
-
-  const isUpdate = lastAnalysis !== null;
-  showLoading(isUpdate);
-
-  // Limpiar timers previos de seguridad
-  if (countdownTimer) clearTimeout(countdownTimer);
-  if (slowResponseTimer) clearTimeout(slowResponseTimer);
-
-  currentController = new AbortController();
-
-  // Timer para mensaje lento (15s) - Feedback visual solamente
-  slowResponseTimer = setTimeout(() => {
-    // Solo si seguimos cargando
-    if (observerLoading) {
-        showStatus('analyzing', 'Modelo profundo, esperando respuesta...');
-    }
-  }, 15000);
-
-  try {
-    // 1. Iniciar Task (POST) - Respuesta inmediata
-    const res = await fetch('/lab/observer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient_context: ctx, force: force }),
-      signal: currentController.signal
-    });
-
-    if (!res.ok) {
-      showStatus('error', `HTTP ${res.status}`);
-      observerLoading = false;
-      return;
-    }
-
-    const data = await res.json();
-    const taskId = data.task_id;
-    
-    // 2. Iniciar Polling
-    // Nota: observerLoading se mantiene true hasta que el polling termine
-    pollObserverStatus(taskId);
-
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      showStatus('idle', 'Cancelado');
-    } else {
-      showStatus('error', 'Sin conexión al servidor');
-    }
-    observerLoading = false;
-  } finally {
-    currentController = null;
-    // IMPORTANTE: NO poner observerLoading = false aquí, 
-    // porque el polling sigue corriendo en background (promesa separada)
-    // El polling se encarga de liberar el loading.
-  }
-}
-
-// Helper para liberar loading dentro de pollObserverStatus
-// Reescribimos para claridad
-
-
-function pollObserver() {
-  if (currentMode !== 'sgmi') return;
-  if (observerLoading) return;  // No polling mientras hay análisis activo
-
-  if (hasContextChanged()) {
-    callObserver(false);
-  }
-  // No mostrar "sin cambios" constantemente - solo cuando hay cambios reales
-}
-
-function startPolling() {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(pollObserver, POLL_INTERVAL_MS);
-}
-
-function stopPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-    pollingInterval = null;
-  }
-}
-
-
 // =============================
-// AGENT ACTIVE LOGIC
+// INIT
 // =============================
+let availableOllamaModels = [];
 
-async function pollAgentStatus(taskId) {
-  try {
-    const res = await fetch(`/lab/agent/${taskId}`);
-    if (!res.ok) {
-        document.getElementById('agentStatus').innerText = "Error polling agent";
-        return;
-    }
-    
-    const data = await res.json();
-    
-    if (data.status === 'processing') {
-       setTimeout(() => pollAgentStatus(taskId), 1000);
-    } else {
-       // Done
-       document.getElementById('agentStatus').style.display = 'none';
-       document.getElementById('btnSendAgent').disabled = false;
-       
-       if (data.status === 'ok') {
-         if (data.task_status === 'error') {
-            document.getElementById('agentOutput').innerText = JSON.stringify(data.result, null, 2); 
-            document.getElementById('agentOutput').style.color = '#dc2626';
-         } else {
-            // Success
-             const result = data.result || {};
-             const answer = result.answer || JSON.stringify(result, null, 2);
-             document.getElementById('agentOutput').innerText = answer;
-             document.getElementById('agentOutput').style.color = '#334155';
-         }
-       } else {
-         document.getElementById('agentOutput').innerText = "Respuesta inválida del servidor";
-       }
-    }
-  } catch (err) {
-     console.error("Polling agent error", err);
-     document.getElementById('agentStatus').innerText = "Error de red";
-     document.getElementById('btnSendAgent').disabled = false;
-  }
+function init() {
+    createNewSession();
+    fetchModels();
 }
 
-async function callAgent() {
-  const input = document.getElementById('agentInput').value;
-  if (!input.trim()) return;
-
-  // Visual Setup
-  const btn = document.getElementById('btnSendAgent');
-  const status = document.getElementById('agentStatus');
-  const output = document.getElementById('agentOutput');
-
-  btn.disabled = true;
-  status.style.display = 'block';
-  status.innerText = "Procesando...";
-  output.innerText = "";
-  
-  try {
-    // Get updated context
-    const ctx = getPatientContext();
-    const role = document.getElementById('agentRole').value;
-
-    const res = await fetch('/lab/agent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-          user_text: input, 
-          role: role,
-          patient_context: ctx,
-          options: {} 
-      })
-    });
-
-    if (!res.ok) {
-      status.innerText = `Error HTTP ${res.status}`;
-      btn.disabled = false;
-      return;
-    }
-
-    const data = await res.json();
-    const taskId = data.task_id;
-    
-    // Start Polling
-    pollAgentStatus(taskId);
-
-  } catch (err) {
-    status.innerText = "Error de conexión";
-    btn.disabled = false;
-  }
-}
-
-function startCountdown() {
-  if (observerLoading) return;
-  
-  if (countdownTimer) clearTimeout(countdownTimer);
-  
-  let count = 3;
-  showStatus('idle', `Nuevo análisis en ${count}`);
-  
-  const tick = () => {
-    count--;
-    if (count > 0) {
-      showStatus('idle', `Nuevo análisis en ${count}`);
-      countdownTimer = setTimeout(tick, 1000);
-    } else {
-      callObserver(false);
-    }
-  };
-  
-  countdownTimer = setTimeout(tick, 1000);
-}
-
-// =============================
-// Event Listeners
-// =============================
-const fields = [
-  'patientName', 'patientAge', 'patientSex', 'clinicalPhase',
-  'reasonForVisit', 'medicalHistory', 'socioCultural', 'clinicalText'
-];
-
-// Los cambios manuales disparan el countdown
-fields.forEach(id => {
-  const el = document.getElementById(id);
-  if (el) {
-    el.addEventListener('input', () => {
-      startCountdown();
-    });
-  }
-});
-
-// Initial call + start polling + Warmup Check
-document.addEventListener('DOMContentLoaded', () => {
-  checkWarmupStatus();
-  setTimeout(() => {
-    callObserver(true);
-    startPolling();
-  }, 500);
-});
-
-// Warmup / Connection Status Logic
-async function checkWarmupStatus() {
-    const el = document.getElementById('connectionStatus');
-    if (!el) return;
-
+async function fetchModels() {
     try {
-        const res = await fetch('/lab/status');
-        const data = await res.json();
-        
-        if (data.warmup_done) {
-            el.innerHTML = '<span style="color:#22c55e;">●</span> Motor cognitivo listo';
-        } else {
-            // Retry in 1s
-            setTimeout(checkWarmupStatus, 1000);
+        const res = await fetch('/lab/models');
+        if (res.ok) {
+            const data = await res.json();
+            availableOllamaModels = data.models || [];
+            
+            // Populate Datalist
+            const dl = document.getElementById('ollamaModels');
+            dl.innerHTML = '';
+            availableOllamaModels.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                dl.appendChild(opt);
+            });
+            
+            validateModel();
         }
     } catch (e) {
-        console.error("Status check failed", e);
-        // Retry slower
-        setTimeout(checkWarmupStatus, 3000);
+        console.error("Error fetching models", e);
     }
 }
-</script>
 
+function toggleModelInput() {
+    const prov = document.getElementById('PROVIDER').value;
+    const modelInput = document.getElementById('MODEL');
+    const badge = document.getElementById('modelBadge');
+    
+    if (prov === 'ollama') {
+        modelInput.setAttribute('list', 'ollamaModels');
+        modelInput.placeholder = "qwen2.5:3b";
+        validateModel();
+    } else {
+        modelInput.setAttribute('list', 'openaiModels'); // Use datalist for OpenAI too
+        modelInput.placeholder = "gpt-4o";
+        badge.style.display = 'none';
+        document.getElementById('btnSend').disabled = false;
+    }
+}
+
+function validateModel() {
+    const prov = document.getElementById('PROVIDER').value;
+    if (prov !== 'ollama') return;
+
+    const val = document.getElementById('MODEL').value;
+    const badge = document.getElementById('modelBadge');
+    const btn = document.getElementById('btnSend');
+    
+    if (availableOllamaModels.includes(val) || val === "") { // Empty means default, or matched
+        if (val !== "") {
+            badge.textContent = "OK";
+            badge.style.background = "#059669"; // Green
+            badge.style.color = "white";
+            badge.style.display = "inline-block";
+        } else {
+             badge.style.display = "none";
+        }
+        btn.disabled = false;
+    } else {
+        badge.textContent = "unverified";
+        badge.style.background = "#d97706"; // Amber
+        badge.style.color = "white";
+        badge.style.display = "inline-block";
+        // We don't block send, we just warn (amber) because it might be a new tag not yet fetched
+        // or user knows better. Real validation happens on backend.
+    }
+}
+
+function createNewSession() {
+    const id = 'sess-' + Date.now();
+    const newSession = {
+        id: id,
+        title: "New Chat",
+        timestamp: new Date(),
+        messages: [], // { type, content, isHtml, metrics }
+        totalCost: 0.0
+    };
+    
+    sessions.unshift(newSession); // Add to top
+    currentSessionId = id;
+    
+    renderSidebar();
+    renderChat();
+    updateCostDisplay();
+}
+
+function switchSession(id) {
+    currentSessionId = id;
+    renderSidebar();
+    renderChat();
+    updateCostDisplay();
+}
+
+function updateSessionTitle(text) {
+    const sess = sessions.find(s => s.id === currentSessionId);
+    if (sess && sess.title === "New Chat") {
+        sess.title = text.substring(0, 30) + (text.length > 30 ? "..." : "");
+        renderSidebar();
+    }
+}
+
+// =============================
+// RENDERING
+// =============================
+function renderSidebar() {
+    const container = document.getElementById('historyList');
+    container.innerHTML = '';
+    
+    sessions.forEach(sess => {
+        const item = document.createElement('div');
+        item.className = `history-item ${sess.id === currentSessionId ? 'active' : ''}`;
+        item.onclick = () => switchSession(sess.id);
+        
+        // Format time
+        const timeStr = sess.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        item.innerHTML = `
+            <div class="h-title">${sess.title}</div>
+            <div class="h-meta">
+                <span>${timeStr}</span>
+                <span>$${sess.totalCost.toFixed(4)}</span>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function renderChat() {
+    const container = document.getElementById('chatHistory');
+    container.innerHTML = '';
+    
+    const sess = sessions.find(s => s.id === currentSessionId);
+    if (!sess) return;
+    
+    if (sess.messages.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center; color:#475569; margin-top:60px; font-size:13px;">
+               <p style="font-size:16px; color:#e2e8f0; font-weight:600;">Vortex Cognitive Lab</p>
+               <p>Configura los parámetros arriba y comienza.</p>
+               <p style="margin-top:20px; font-size:11px;">Providers: Ollama (Local) | OpenAI (Cloud)</p>
+            </div>
+        `;
+        return;
+    }
+    
+    sess.messages.forEach(msg => {
+        createBubbleDOM(msg, container);
+    });
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+function createBubbleDOM(msg, container) {
+    const div = document.createElement('div');
+    div.className = `bubble ${msg.type}`;
+    
+    if (msg.isHtml) {
+        div.innerHTML = msg.content;
+    } else {
+        // Simple markdown-ish
+        div.innerHTML = msg.content.replace(/\\n/g, '<br>');
+    }
+    
+    if (msg.metrics) {
+        const footer = document.createElement('div');
+        footer.className = 'msg-footer';
+        footer.innerHTML = `
+            <span class="metric-tag">🤖 ${msg.metrics.real_model || msg.metrics.prov}</span>
+            <span class="metric-tag" style="${msg.metrics.raw_mode ? 'color:#f59e0b;' : 'color:#3b82f6;'}">
+                ${msg.metrics.raw_mode ? '[Base]' : '[Base+Ext]'}
+            </span>
+            <span class="metric-tag">⚡ ${msg.metrics.ms}ms</span>
+            <span class="metric-tag">📝 ${msg.metrics.tok} tok</span>
+            <span class="metric-tag" style="color:#10b981;">💰 $${msg.metrics.cost.toFixed(5)}</span>
+        `;
+        div.appendChild(footer);
+    }
+    
+    container.appendChild(div);
+}
+
+function updateCostDisplay() {
+    const sess = sessions.find(s => s.id === currentSessionId);
+    if (sess) {
+        document.getElementById('sessionCost').innerText = sess.totalCost.toFixed(5);
+    }
+}
+
+// =============================
+// ACTIONS
+// =============================
+async function sendMessage() {
+    const inputEl = document.getElementById('userInput');
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    const sess = sessions.find(s => s.id === currentSessionId);
+    if (!sess) return;
+
+    // Update title if first message
+    updateSessionTitle(text);
+
+    // Add User Message
+    sess.messages.push({ type: 'user', content: text, isHtml: false });
+    renderChat();
+    
+    inputEl.value = '';
+    
+    // Lock UI
+    const btn = document.getElementById('btnSend');
+    btn.disabled = true;
+    btn.innerText = '...';
+
+    // Params
+    const provider = document.getElementById('PROVIDER').value;
+    const model = document.getElementById('MODEL').value;
+    const agent = document.getElementById('AGENT').value;
+    const raw = document.getElementById('RAW').checked;
+    const mode = document.getElementById('MODE').value;
+
+    // Loading State (Temporary visual)
+    const loadingMsg = { type: 'agent', content: '<div class="spinner"></div>', isHtml: true };
+    createBubbleDOM(loadingMsg, document.getElementById('chatHistory')); // Just append visual
+    const chatContainer = document.getElementById('chatHistory');
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    try {
+        // 1. Submit Task
+        const res = await fetch('/lab/agent', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                user_text: text,
+                role: agent,
+                provider: provider,
+                model: model,
+                raw: raw,
+                mode: mode,
+                options: {}
+            })
+        });
+        
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        
+        const data = await res.json();
+        const taskId = data.task_id;
+        
+        // 2. Poll
+        pollAgent(taskId, { provider, model, agent, raw });
+        
+    } catch (err) {
+        // Remove loading visual by re-rendering
+        renderChat(); 
+        
+        // Add Error Msg
+        sess.messages.push({ type: 'agent', content: `Error: ${err.message}`, isHtml: false });
+        renderChat();
+        
+        btn.disabled = false;
+        btn.innerText = 'ENVIAR';
+    }
+}
+
+async function pollAgent(taskId, metadata) {
+    try {
+        const res = await fetch(`/lab/agent/${taskId}`);
+        if (!res.ok) throw new Error("Polling error");
+        
+        const data = await res.json();
+        
+        if (data.status === 'processing') {
+            setTimeout(() => pollAgent(taskId, metadata), 1000);
+            return;
+        }
+        
+        // Finalize
+        document.getElementById('btnSend').disabled = false;
+        document.getElementById('btnSend').innerText = 'ENVIAR';
+        
+        const sess = sessions.find(s => s.id === currentSessionId);
+        
+        // Remove loading visual by re-rendering (the loading msg wasn't pushed to sess.messages)
+        // renderChat(); // Will be called after push
+        
+        if (data.status === 'ok') {
+            const result = data.result || {};
+            const answer = result.answer || "No answer";
+            const metrics = {
+                 ms: result.llm_ms || 0,
+                 tok: result.tokens_total || 0,
+                 cost: result.cost_total || 0,
+                 prov: result.provider || metadata.provider
+            };
+            
+            // Add Agent Message to Session
+            sess.messages.push({ 
+                type: 'agent', 
+                content: answer, 
+                isHtml: false, 
+                metrics: metrics 
+            });
+            
+            // Warn RAW
+            if (metadata.raw && metadata.agent !== 'clinical') {
+                 sess.messages.push({ 
+                    type: 'agent', 
+                    content: "⚠️ [WARN] RAW mode was requested but ignored because agent is not 'clinical'.", 
+                    isHtml: false
+                });
+            }
+            
+            // Update Cost
+            sess.totalCost += metrics.cost;
+            updateCostDisplay();
+            
+        } else {
+             sess.messages.push({ type: 'agent', content: "Server Error: " + JSON.stringify(data), isHtml: false });
+        }
+        
+        renderChat();
+        renderSidebar(); // Update cost in sidebar
+        
+    } catch (err) {
+        document.getElementById('btnSend').disabled = false;
+        document.getElementById('btnSend').innerText = 'ENVIAR';
+        
+        const sess = sessions.find(s => s.id === currentSessionId);
+        sess.messages.push({ type: 'agent', content: "Network Error", isHtml: false });
+        renderChat();
+    }
+}
+
+// Allow Enter to send
+document.getElementById('userInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// Start
+init();
+
+</script>
 </body>
 </html>
     """
     return html
+
 
 
 # =========================
@@ -1441,7 +991,7 @@ async def get_observer_result(task_id: str):
 # Agent Core Endpoint (Async)
 # =========================
 
-def run_agent_background(task_id: str, user_text: str, role: str, context: dict, options: dict):
+def run_agent_background(task_id: str, user_text: str, role: str, context: dict, options: dict, provider: str, model: str, raw: bool, mode: str):
     """Background worker para Agent Core"""
     try:
         # Llamada al núcleo cognitivo real con ROL y CONTEXTO
@@ -1449,7 +999,11 @@ def run_agent_background(task_id: str, user_text: str, role: str, context: dict,
             user_text=user_text,
             role=role,
             context=context,
-            options=options
+            options=options,
+            provider=provider,
+            model=model,
+            raw=raw,
+            mode=mode
         )
         tasks_agent[task_id] = {
             "status": "done",
@@ -1481,7 +1035,11 @@ async def agent_analyze(request: AgentRequest, background_tasks: BackgroundTasks
         request.user_text, 
         request.role,
         request.patient_context,
-        request.options or {}
+        request.options or {},
+        provider=request.provider,
+        model=request.model,
+        raw=request.raw,
+        mode=request.mode
     )
 
     return {"task_id": task_id, "status": "processing"}

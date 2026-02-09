@@ -1,0 +1,33 @@
+[OK] Backend UP: {'service': 'Vortex Clinical Core', 'status': 'running', 'mode': 'LAB', 'endpoints': {'docs': '/docs', 'lab': '/lab', 'timeline': '/procedures/{procedure_id}/timeline'}}
+
+--- Test GET /lab/models ---
+[OK] Models: {'models': [], 'base_url': 'http://localhost:11434'}
+[WARN] No models returned from Ollama (or Ollama down)
+
+--- Test M·ltiples Requests (Concurrent) ---
+[1] Enviando request (ollama, raw=False)...
+[2] Enviando request (ollama, raw=False)...
+[3] Enviando request (openai, raw=False)...
+[1] Task ID: 98ddd787-631c-45a1-8672-4c10dfa3bd15 (Status: processing)
+[3] Task ID: 62388472-523e-47a7-8452-c118f515d79f (Status: processing)
+[2] Task ID: 8775acc8-e795-4e87-bbcd-7804d80a4ad3 (Status: processing)
+[1] [...] Polling... (processing)
+[3] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[3] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[3] [OK] Provider: openai, RealModel: N/A, Cost: $0.00000, Raw: False
+[3] Answer: Error OpenAI: Client error '401 Unauthorized' for url 'https://api.openai.com/v1/chat/completions'
+F...
+[3] [ERR] Error: 'charmap' codec can't encode characters in position 4-5: character maps to <undefined>
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [OK] Provider: ollama/error, RealModel: N/A, Cost: $0.00000, Raw: False
+[1] Answer: Error: Modelo 'llama3' no encontrado en Ollama. Disponibles: ...
+[2] [OK] Provider: ollama/error, RealModel: N/A, Cost: $0.00000, Raw: False
+[2] Answer: Error: Modelo 'invalid-model-xyz' no encontrado en Ollama. Disponibles: ...

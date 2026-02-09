@@ -1,0 +1,32 @@
+[OK] Backend UP: {'service': 'Vortex Clinical Core', 'status': 'running', 'mode': 'LAB', 'endpoints': {'docs': '/docs', 'lab': '/lab', 'timeline': '/procedures/{procedure_id}/timeline'}}
+
+--- Test GET /lab/models ---
+[OK] Models: {'models': [], 'base_url': 'http://localhost:11434'}
+[WARN] No models returned from Ollama (or Ollama down)
+
+--- Test M├║ltiples Requests (Concurrent) ---
+[1] Enviando request (ollama, raw=False)...
+[2] Enviando request (ollama, raw=False)...
+[3] Enviando request (openai, raw=False)...
+[1] Task ID: e2feb12b-1f0c-45a6-9ffc-aa3cba2199d1 (Status: processing)
+[3] Task ID: 286ca33a-f1f3-408d-9352-8596dc5eec0f (Status: processing)
+[2] Task ID: 4f0bed39-2b84-40bd-993e-e8c26798855d (Status: processing)
+[1] [...] Polling... (processing)
+[3] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[3] [OK] Provider: openai, RealModel: N/A, Cost: $0.00000, Raw: False
+[3] Answer: Error OpenAI: Client error '401 Unauthorized' for url 'https://api.openai.com/v1/chat/completions'
+F...
+[3] ÔÜá´©Å Warning: 'real_model' missing in response
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [OK] Provider: ollama/error, RealModel: N/A, Cost: $0.00000, Raw: False
+[1] Answer: Error: Modelo 'llama3' no encontrado en Ollama. Disponibles: ...
+[2] [OK] Provider: ollama/error, RealModel: N/A, Cost: $0.00000, Raw: False
+[2] Answer: Error: Modelo 'invalid-model-xyz' no encontrado en Ollama. Disponibles: ...
