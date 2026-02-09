@@ -76,21 +76,18 @@ def get_lab_models():
     models = get_ollama_models(base_url)
     return {"models": models, "base_url": base_url}
 
-@router.get("/lab", response_class=HTMLResponse)
-def lab_ui():
+@router.get("/lab/agents", response_class=HTMLResponse)
+def agents_lab_ui():
     """
-    LAB Unificado con dos modos exclusivos:
-    1. SGMI · Observador pasivo
-    2. Agentes Vortex (placeholder)
+    UI Dedicada para Experimentación de Agentes (Benchmarking).
+    Separada del flujo clínico SGMI.
     """
     html = """
-
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Vortex Clinical LAB</title>
+  <title>Vortex Agents LAB</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -318,8 +315,8 @@ def lab_ui():
 <!-- Header -->
 <header class="lab-header">
   <div>
-    <h1 class="lab-title">Vortex Clinical LAB</h1>
-    <p class="lab-subtitle">Experimentación Cognitiva</p>
+    <h1 class="lab-title">Vortex Agents LAB</h1>
+    <p class="lab-subtitle">Benchmarking Cognitivo Multi-LLM</p>
   </div>
   <div>
        <!-- Future status indicators -->
@@ -425,9 +422,6 @@ def lab_ui():
 let sessions = [];
 let currentSessionId = null;
 
-// =============================
-// INIT
-// =============================
 // =============================
 // INIT
 // =============================
@@ -796,6 +790,42 @@ init();
 </script>
 </body>
 </html>
+    """
+    return html
+
+@router.get("/lab", response_class=HTMLResponse)
+def lab_ui():
+    """
+    SGMI Dashboard Placeholder.
+    La UI de experimentación se movió a /lab/agents.
+    """
+    html = """
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Vortex SGMI Lab</title>
+      <style>
+        body { background: #0b1020; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 40px; border-radius: 12px; text-align: center; border: 1px solid #334155; }
+        h1 { color: #3b82f6; margin-bottom: 8px; }
+        p { color: #94a3b8; margin-bottom: 24px; }
+        a { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        a:hover { background: #2563eb; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+         <h1>Vortex SGMI Lab</h1>
+         <p>Sistema de Gestión Médica Inteligente (SGMI)</p>
+         <div style="margin: 20px 0; font-size: 12px; color: #64748b;">
+            STATUS: <span style="color: #10b981;">ONLINE</span>
+         </div>
+         <p>Para experimentación con agentes y benchmarking, usa el nuevo laboratorio dedicado:</p>
+         <a href="/lab/agents">Ir a Vortex Agents LAB →</a>
+      </div>
+    </body>
+    </html>
     """
     return html
 

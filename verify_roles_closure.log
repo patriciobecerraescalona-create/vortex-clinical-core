@@ -1,0 +1,13 @@
+[WARN] DATABASE_URL no definida. Usando SQLite local (LAB mode).
+Traceback (most recent call last):
+
+--- Verifying Prompt Injection Logic (RAW Rule) ---
+
+  File "C:\Users\ducky\dev\vortex-clinical-core\verify_lab_roles.py", line 43, in <module>
+    verify_roles()
+  File "C:\Users\ducky\dev\vortex-clinical-core\verify_lab_roles.py", line 28, in verify_roles
+    print(f"Role: {s['role']:<12} | Raw: {str(s['raw']):<5} | Expect: {s['expect']} | {status}")
+  File "C:\Users\ducky\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 46: character maps to <undefined>

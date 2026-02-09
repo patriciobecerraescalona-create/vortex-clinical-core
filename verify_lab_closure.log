@@ -1,0 +1,39 @@
+[OK] Backend UP: {'service': 'Vortex Clinical Core', 'status': 'running', 'mode': 'LAB', 'endpoints': {'docs': '/docs', 'lab': '/lab', 'timeline': '/procedures/{procedure_id}/timeline'}}
+
+--- Test GET /lab/models ---
+[OK] Models: {'models': [], 'base_url': 'http://localhost:11434'}
+[WARN] No models returned from Ollama (or Ollama down)
+
+--- Test M├║ltiples Requests (Concurrent) ---
+[1] Enviando request (ollama, raw=False)...
+[2] Enviando request (ollama, raw=False)...
+[3] Enviando request (openai, raw=False)...
+[4] Enviando request (openai, raw=False)...
+[1] Task ID: 3b4e09c6-8140-493d-a408-255cd5a9e9c7 (Status: processing)
+[3] Task ID: 1e13537c-ca5d-45f7-929f-f5f145f1fea6 (Status: processing)
+[2] Task ID: 5f72fa1a-4741-4b49-84d6-6f15b4ad217f (Status: processing)
+[4] Task ID: d51ce948-b605-4dee-b2b1-ad1ac4281564 (Status: processing)
+[1] [...] Polling... (processing)
+[3] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[4] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[4] [OK] Provider: openai, RealModel: N/A, Cost: $0.00000, Raw: False
+[4] Answer: Error OpenAI: Client error '401 Unauthorized' for url 'https://api.openai.com/v1/chat/completions'
+F...
+[4] ÔÜá´©Å Warning: 'real_model' missing in response
+[3] [OK] Provider: openai, RealModel: N/A, Cost: $0.00000, Raw: False
+[3] Answer: Error OpenAI: Client error '401 Unauthorized' for url 'https://api.openai.com/v1/chat/completions'
+F...
+[3] ÔÜá´©Å Warning: 'real_model' missing in response
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [...] Polling... (processing)
+[2] [...] Polling... (processing)
+[1] [OK] Provider: ollama/error, RealModel: N/A, Cost: $0.00000, Raw: False
+[1] Answer: Error: Modelo 'llama3' no encontrado en Ollama. Disponibles: ...
+[2] [OK] Provider: ollama/error, RealModel: N/A, Cost: $0.00000, Raw: False
+[2] Answer: Error: Modelo 'invalid-model-xyz' no encontrado en Ollama. Disponibles: ...

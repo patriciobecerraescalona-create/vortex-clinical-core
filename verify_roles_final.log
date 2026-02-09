@@ -1,0 +1,24 @@
+[WARN] DATABASE_URL no definida. Usando SQLite local (LAB mode).
+
+--- Verifying Prompt Injection Logic (RAW Rule) ---
+
+Role: clinical     | Raw: False | Expect: 2 | Ô£à OK
+   [0] Baseline: Eres un m├®dico cl├¡nico senior con amplia experiencia hospita...
+   [1] Extended: Organiza tu an├ílisis en:
+- Resumen cl├¡nico relevante
+- Hip├│t...
+------------------------------------------------------------
+Role: clinical     | Raw: True  | Expect: 1 | Ô£à OK
+   [0] Baseline: Eres un m├®dico cl├¡nico senior con amplia experiencia hospita...
+------------------------------------------------------------
+Role: commercial   | Raw: False | Expect: 2 | Ô£à OK
+   [0] Baseline: Eres un consultor comercial senior B2B con experiencia en se...
+   [1] Extended: Estructura tu respuesta en:
+- Comprensi├│n del problema
+- Pro...
+------------------------------------------------------------
+Role: commercial   | Raw: True  | Expect: 1 | Ô£à OK
+   [0] Baseline: Eres un consultor comercial senior B2B con experiencia en se...
+------------------------------------------------------------
+
+Ô£à Verification SUCCESS: Prompt logic adheres to RAW rules.
