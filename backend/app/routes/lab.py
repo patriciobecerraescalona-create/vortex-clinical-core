@@ -371,9 +371,9 @@ def lab_ui():
       </div>
       
       <div class="ctrl-group" style="align-items:center;">
-        <label class="ctrl-label" style="margin-bottom:4px">RAW MODE</label>
+        <label class="ctrl-label" style="margin-bottom:4px" id="rawLabel">RAW MODE: OFF</label>
         <label class="toggle-switch">
-            <input type="checkbox" id="RAW" class="toggle-checkbox">
+            <input type="checkbox" id="RAW" class="toggle-checkbox" onchange="updateRawLabel()">
             <span class="toggle-slider"></span>
         </label>
       </div>
@@ -475,6 +475,18 @@ function toggleModelInput() {
         modelInput.placeholder = "gpt-4o";
         badge.style.display = 'none';
         document.getElementById('btnSend').disabled = false;
+    }
+}
+
+function updateRawLabel() {
+    const raw = document.getElementById('RAW').checked;
+    const label = document.getElementById('rawLabel');
+    if (raw) {
+        label.textContent = "RAW MODE: ON";
+        label.style.color = "#f59e0b"; // Amber
+    } else {
+        label.textContent = "RAW MODE: OFF";
+        label.style.color = "#64748b";
     }
 }
 

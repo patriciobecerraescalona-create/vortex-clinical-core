@@ -106,7 +106,20 @@ def run_llm(*, provider: str = "openai", **kwargs) -> Dict[str, Any]:
             }
             
         if not model:
-            model = "gpt-3.5-turbo"
+            model = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
+
+        # LAB Normalization: Support specific models only
+        OPENAI_SUPPORTED_MODELS = [
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4.1", 
+            "gpt-4.1-mini"
+        ]
+        
+        # Validation & Fallback
+        if model not in OPENAI_SUPPORTED_MODELS:
+            print(f"[WARN] Model '{model}' not supported in LAB. Falling back to 'gpt-4o-mini'.")
+            model = "gpt-4o-mini"
 
         url = "https://api.openai.com/v1/chat/completions"
         
@@ -140,23 +153,23 @@ def run_llm(*, provider: str = "openai", **kwargs) -> Dict[str, Any]:
             t_completion = usage.get("completion_tokens", 0)
             t_total = usage.get("total_tokens", 0)
             
-            # Cost estimation (approx)
-            # gpt-3.5-turbo: $0.50 / $1.50
-            price_in = 0.50 / 1_000_000
-            price_out = 1.50 / 1_000_000
+            # Cost estimation (USD per 1M tokens)
+            # Defaults to gpt-4o-mini pricing
+            price_in = 0.15 / 1_000_000
+            price_out = 0.60 / 1_000_000
             
-            if "gpt-4o" in model:
+            if "gpt-4o" in model and "mini" not in model:
                 # gpt-4o: $5.00 / $15.00
                 price_in = 5.00 / 1_000_000
                 price_out = 15.00 / 1_000_000
-            elif "gpt-4-turbo" in model:
-                # gpt-4-turbo: $10.00 / $30.00
-                price_in = 10.00 / 1_000_000
-                price_out = 30.00 / 1_000_000
-            elif "gpt-4" in model:
-                 # gpt-4 (original): $30.00 / $60.00
-                price_in = 30.00 / 1_000_000
-                price_out = 60.00 / 1_000_000
+            elif "gpt-4.1" in model:
+                # Placeholder for 4.1 pricing, assume similar to 4o for now
+                if "mini" in model:
+                     price_in = 0.15 / 1_000_000
+                     price_out = 0.60 / 1_000_000
+                else:
+                     price_in = 5.00 / 1_000_000
+                     price_out = 15.00 / 1_000_000
             
             cost_inference = (t_prompt * price_in) + (t_completion * price_out)
 
