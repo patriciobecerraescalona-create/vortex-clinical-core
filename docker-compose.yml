@@ -32,10 +32,7 @@ services:
       - .:/workspace
     working_dir: /workspace
     command: >
-      uvicorn backend.app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
+      uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 
 volumes:
   vortex_pgdata:
